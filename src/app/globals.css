@@ -1,0 +1,318 @@
+@import "tailwindcss";
+
+/* dark: follows the header toggle (data-theme), or the device when no choice was made. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+/* Intyoza design tokens, shared with the Intyoza web app (Figma palette). */
+:root {
+  --brand: #6c4ab6;
+  --brand-strong: #563a96;
+  --brand-soft: #ede7f6;
+  --accent: #e96b8a;
+  --accent-soft: #fce8ed;
+  --accent-text: #b3365a;
+  --teal: #2a9d8f;
+  --teal-soft: #e0f2f1;
+  --teal-text: #1f7a6e;
+  --on-brand: #ffffff;
+  --ink: #263238;
+  --ink-text: #ffffff;
+  --peach: #fff3e3;
+  --peach-text: #8a5a00;
+  --lavender: #f1ecfa;
+  --sun: #f4b740;
+  --sun-soft: #fdf3dc;
+  --sun-text: #8a5a00;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --success: #1f7a3f;
+  --success-soft: #e5f4ea;
+
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --surface-2: #f1eff4;
+  --field: #edeaea;
+  --text: #263238;
+  --text-muted: #6b7280;
+  --border: #e4e1ea;
+  --focus: #6c4ab6;
+  --shadow-sm: 0 1px 2px rgba(40, 30, 20, 0.06);
+  --shadow: 0 6px 20px -8px rgba(40, 30, 60, 0.18);
+
+  --display: "Iosevka Charon", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+
+  color-scheme: light;
+}
+
+/* Dark values, used by the device setting (unless light was picked) and by the header toggle. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --brand: #b39ddb;
+    --brand-strong: #cdbdec;
+    --brand-soft: #2a2140;
+    --accent: #f28ca5;
+    --accent-soft: #3d1f28;
+    --accent-text: #f28ca5;
+    --teal: #5cc4b6;
+    --teal-soft: #16302d;
+    --teal-text: #5cc4b6;
+    --on-brand: #1b1230;
+    --ink: #0d0c11;
+    --ink-text: #ecebf0;
+    --peach: #33291a;
+    --peach-text: #f4c35f;
+    --lavender: #221d33;
+    --sun: #f4c35f;
+    --sun-soft: #352c17;
+    --sun-text: #f4c35f;
+    --danger: #ff8a80;
+    --danger-soft: #3b1b19;
+    --success: #6fcf97;
+    --success-soft: #17301f;
+    --bg: #131217;
+    --surface: #1b1a21;
+    --surface-2: #24222b;
+    --field: #2a2831;
+    --text: #ecebf0;
+    --text-muted: #a9a6b2;
+    --border: #312e3a;
+    --focus: #b39ddb;
+    --shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --brand: #b39ddb;
+  --brand-strong: #cdbdec;
+  --brand-soft: #2a2140;
+  --accent: #f28ca5;
+  --accent-soft: #3d1f28;
+  --accent-text: #f28ca5;
+  --teal: #5cc4b6;
+  --teal-soft: #16302d;
+  --teal-text: #5cc4b6;
+  --on-brand: #1b1230;
+  --ink: #0d0c11;
+  --ink-text: #ecebf0;
+  --peach: #33291a;
+  --peach-text: #f4c35f;
+  --lavender: #221d33;
+  --sun: #f4c35f;
+  --sun-soft: #352c17;
+  --sun-text: #f4c35f;
+  --danger: #ff8a80;
+  --danger-soft: #3b1b19;
+  --success: #6fcf97;
+  --success-soft: #17301f;
+  --bg: #131217;
+  --surface: #1b1a21;
+  --surface-2: #24222b;
+  --field: #2a2831;
+  --text: #ecebf0;
+  --text-muted: #a9a6b2;
+  --border: #312e3a;
+  --focus: #b39ddb;
+  --shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+/* Tailwind colours read the variables above, so every utility follows light/dark automatically. */
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-on-brand: var(--on-brand);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-teal: var(--teal);
+  --color-teal-soft: var(--teal-soft);
+  --color-teal-text: var(--teal-text);
+  --color-ink: var(--ink);
+  --color-ink-text: var(--ink-text);
+  --color-peach: var(--peach);
+  --color-peach-text: var(--peach-text);
+  --color-lavender: var(--lavender);
+  --color-sun: var(--sun);
+  --color-sun-soft: var(--sun-soft);
+  --color-sun-text: var(--sun-text);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-field: var(--field);
+  --color-fg: var(--text);
+  --color-muted: var(--text-muted);
+  --color-line: var(--border);
+  --color-focus: var(--focus);
+
+  /* Older names used by the shared ui components */
+  --color-primary: var(--brand);
+  --color-muted-foreground: var(--text-muted);
+  --color-border: var(--border);
+  --color-background: var(--surface);
+  --color-card: var(--surface);
+
+  --font-sans: var(--sans);
+  --font-display: var(--display);
+  --shadow-card: var(--shadow);
+  --shadow-hair: var(--shadow-sm);
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+  body {
+    min-height: 100svh;
+    font: 16px/1.55 var(--sans);
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  a {
+    color: inherit;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+}
+
+/* Shared building blocks, same names as the Intyoza web app. */
+@layer components {
+  .btn {
+    @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full border border-transparent px-[18px] py-2.5 font-semibold no-underline transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55;
+  }
+  .btn-sm {
+    @apply min-h-9 px-3.5 py-1.5 text-[0.9rem];
+  }
+  .btn-primary {
+    @apply bg-brand text-on-brand hover:bg-brand-strong;
+  }
+  .btn-accent {
+    @apply bg-accent text-on-brand;
+  }
+  .btn-outline {
+    @apply border-brand bg-transparent text-brand hover:bg-brand-soft;
+  }
+  .btn-danger {
+    @apply bg-danger text-surface hover:opacity-90;
+  }
+  .btn-danger-outline {
+    @apply border-danger bg-transparent text-danger hover:bg-danger-soft;
+  }
+  .btn-ghost {
+    @apply border-line bg-transparent text-fg hover:bg-surface-2;
+  }
+
+  .chip {
+    @apply inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[0.9rem] text-fg no-underline hover:border-brand aria-pressed:border-brand aria-pressed:bg-brand aria-pressed:text-on-brand;
+  }
+  .chip-row {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .tag {
+    @apply inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-0.5 text-[0.78rem] font-semibold whitespace-nowrap text-muted;
+  }
+  .tag-brand {
+    @apply bg-brand-soft text-brand;
+  }
+  .tag-accent {
+    @apply bg-accent-soft text-accent-text;
+  }
+  .tag-teal {
+    @apply bg-teal-soft text-teal-text;
+  }
+  .tag-sun {
+    @apply bg-sun-soft text-sun-text;
+  }
+  .tag-success {
+    @apply bg-success-soft text-success;
+  }
+  .tag-danger {
+    @apply bg-danger-soft text-danger;
+  }
+
+  .card {
+    @apply rounded-[14px] border border-line bg-surface p-5 shadow-hair;
+  }
+
+  .input,
+  .select,
+  .textarea {
+    @apply min-h-11 w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-fg placeholder:text-muted focus:border-transparent focus:outline-2 focus:outline-offset-0 focus:outline-focus;
+  }
+  .label {
+    @apply mb-1.5 block text-[0.9rem] font-semibold;
+  }
+  .field-error {
+    @apply mt-1.5 text-[0.82rem] text-danger;
+  }
+
+  .notice {
+    @apply flex items-start gap-3 rounded-[14px] bg-brand-soft px-4 py-3.5 text-[0.95rem] text-fg [&>svg]:mt-0.5 [&>svg]:shrink-0;
+  }
+  .notice-warn {
+    @apply bg-sun-soft;
+  }
+  .notice-danger {
+    @apply bg-danger-soft;
+  }
+  .notice-success {
+    @apply bg-success-soft;
+  }
+
+  .eyebrow {
+    @apply mb-1.5 inline-flex items-center gap-2 text-[0.8rem] font-bold tracking-[0.06em] text-brand uppercase;
+  }
+
+  /* Round icon button (theme toggle, menus) */
+  .icon-btn {
+    @apply grid size-[38px] shrink-0 cursor-pointer place-items-center rounded-full border border-line bg-surface p-0 text-fg hover:bg-surface-2;
+  }
+
+  /* Data tables */
+  .table {
+    @apply w-full text-left text-[0.92rem];
+  }
+  .table th {
+    @apply border-b border-line px-4 py-3 text-[0.78rem] font-semibold tracking-[0.04em] whitespace-nowrap text-muted uppercase;
+  }
+  .table td {
+    @apply border-b border-line px-4 py-3 align-middle;
+  }
+  .table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .table tbody tr {
+    @apply hover:bg-surface-2/60;
+  }
+}
