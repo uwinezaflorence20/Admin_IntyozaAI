@@ -2,256 +2,242 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  TbLayoutDashboard, TbUsers,
-  TbLogout, TbMenu2, TbX, TbUser, TbChevronDown, TbChartHistogram, TbInbox, TbLeaf
+  TbLayoutDashboard, TbUsers, TbSparkles, TbMessages, TbBook, TbMapPin,
+  TbLogout, TbMenu2, TbX, TbUser, TbChevronDown, TbShieldLock, TbLoader2,
 } from 'react-icons/tb';
-import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { logout as logoutApi, getMe } from '@/lib/api';
+import { cn } from '@/lib/utils';
+import { getSession, logout } from '@/lib/api';
+import { Brand } from '@/components/Brand';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { Dialog } from '@/components/admin/parts';
+
+const AUTH_PAGES = ['/admin/login', '/admin/forgot-password'];
+
+const MENU = [
+  { name: 'Dashboard', href: '/admin/dashboard', icon: TbLayoutDashboard },
+  { name: 'Users', href: '/admin/users', icon: TbUsers },
+  { name: 'AI Safety', href: '/admin/ai-safety', icon: TbSparkles },
+  { name: 'Community', href: '/admin/community', icon: TbMessages },
+  { name: 'Learning', href: '/admin/learning', icon: TbBook },
+  { name: 'Services', href: '/admin/services', icon: TbMapPin },
+  { name: 'Profile', href: '/admin/profile', icon: TbUser },
+];
+
+const initialsOf = (name = '') =>
+  name.split(' ').filter(Boolean).map((n) => n[0]).join('').slice(0, 2).toUpperCase() || 'A';
+
+function NavLinks({ pathname, onNavigate }) {
+  return (
+    <nav aria-label="Admin" className="flex flex-col gap-1">
+      {MENU.map((item) => {
+        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onNavigate}
+            aria-current={active ? 'page' : undefined}
+            className={cn(
+              'flex items-center gap-3 rounded-full px-4 py-2.5 text-[0.95rem] no-underline transition',
+              active ? 'bg-brand-soft font-semibold text-brand' : 'font-medium text-fg hover:bg-surface-2'
+            )}
+          >
+            <item.icon size={20} className={active ? 'text-brand' : 'text-muted'} />
+            {item.name}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function PrivacyNote() {
+  return (
+    <div className="rounded-[14px] bg-teal-soft p-3.5 text-[0.82rem] text-fg">
+      <strong className="mb-1 flex items-center gap-1.5 text-teal-text">
+        <TbShieldLock size={16} /> Privacy first
+      </strong>
+      Admins see aliases and totals, never chat messages. Handle every report with care.
+    </div>
+  );
+}
 
 export default function AdminLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [userName, setUserName] = useState('');
-  const [userEmail, setUserEmail] = useState('');
-  const [userInitials, setUserInitials] = useState('');
-  const dropdownRef = useRef(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [authReady, setAuthReady] = useState(false);
+  const [user, setUser] = useState(null);
+  const dropdownRef = useRef(null);
 
-  const isAuthPage =
-    pathname === '/admin/login' ||
-    pathname === '/login' ||
-    pathname === '/admin/forgot-password' ||
-    pathname.startsWith('/admin/reset-password');
+  const isAuthPage = AUTH_PAGES.includes(pathname) || pathname.startsWith('/admin/reset-password');
 
   // Auth guard — runs on every route change
   useEffect(() => {
-    if (isAuthPage) return; // auth pages bypass the loading screen via early return below
-
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (isAuthPage) return;
+    const session = getSession();
+    if (!session || session.user?.role !== 'ADMIN') {
       router.replace('/admin/login');
       return;
     }
-
-    try {
-      const userData = JSON.parse(localStorage.getItem('user') || '{}');
-      if (userData.Role !== 'Admin') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        router.replace('/admin/login');
-        return;
-      }
-    } catch {
-      localStorage.removeItem('token');
-      router.replace('/admin/login');
-      return;
-    }
-
-    const t = setTimeout(() => setAuthReady(true), 0);
+    const t = setTimeout(() => setUser(session.user), 0);
     return () => clearTimeout(t);
-  }, [isAuthPage, router]);
+  }, [isAuthPage, pathname, router]);
 
   useEffect(() => {
     const handleOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setProfileOpen(false);
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setProfileOpen(false);
     };
+    const refreshUser = () => setUser(getSession()?.user ?? null);
     document.addEventListener('mousedown', handleOutside);
-
-    // Fetch admin info from API, fall back to localStorage
-    const loadAdminInfo = async () => {
-      // Immediate fallback from stored user object
-      try {
-        const stored = JSON.parse(localStorage.getItem('user') || '{}');
-        const fallbackName = `${stored.FirstName || ''} ${stored.LastName || ''}`.trim() || stored.name || '';
-        if (fallbackName) {
-          setUserName(fallbackName);
-          setUserEmail(stored.Email || stored.email || '');
-          setUserInitials(fallbackName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase());
-        }
-      } catch {}
-
-      // Then fetch fresh data from API
-      try {
-        const res = await getMe();
-        const u = res?.data || res?.user || res;
-        const fullName = `${u.FirstName || ''} ${u.LastName || ''}`.trim();
-        if (fullName) {
-          setUserName(fullName);
-          setUserEmail(u.Email || '');
-          setUserInitials(fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase());
-        }
-      } catch {}
-    };
-
-    loadAdminInfo();
-    window.addEventListener('profileUpdated', loadAdminInfo);
-
+    window.addEventListener('profileUpdated', refreshUser);
     return () => {
       document.removeEventListener('mousedown', handleOutside);
-      window.removeEventListener('profileUpdated', loadAdminInfo);
+      window.removeEventListener('profileUpdated', refreshUser);
     };
   }, []);
 
   if (isAuthPage) return <>{children}</>;
 
-  if (!authReady) {
+  if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="grid min-h-screen place-items-center bg-bg">
+        <TbLoader2 className="animate-spin text-brand" size={32} aria-label="Loading" />
       </div>
     );
   }
 
   const handleLogout = async () => {
-    try {
-      setIsLoggingOut(true);
-      await logoutApi();
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('name');
-      router.replace('/admin/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-      setIsLoggingOut(false);
-      setShowLogoutModal(false);
-    }
+    setIsLoggingOut(true);
+    await logout();
+    router.replace('/admin/login');
   };
 
-  const menuItems = [
-    { name: 'Dashboard',        href: '/admin/dashboard',        icon: TbLayoutDashboard },
-    { name: 'Users',            href: '/admin/users',            icon: TbUsers           },
-    { name: 'Predictions',      href: '/admin/predictions',      icon: TbLeaf            },
-    { name: 'Contacts',         href: '/admin/contacts',         icon: TbInbox           },
-    { name: 'Model Performance',href: '/admin/model-performance',icon: TbChartHistogram  },
-    { name: 'Profile',          href: '/admin/profile',          icon: TbUser            },
-  ];
+  const displayName = user.alias || user.name || 'Admin';
+  const current = MENU.find((m) => pathname.startsWith(m.href));
 
   return (
-    <div className="min-h-screen bg-muted flex">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-72 flex-col bg-primary text-white sticky top-0 h-screen shadow-2xl">
-        <div className="p-6 border-b border-white/5">
-          <Link href="/admin/dashboard" className="flex items-center gap-3">
-            <Image src="/icon.png" alt="AgriWatch" width={38} height={38} className="rounded-xl" />
-            <div className="flex flex-col">
-              <span className="text-xl font-bold tracking-tighter text-white">AGRIWATCH</span>
-              <span className="text-[10px] font-medium tracking-[0.2em] text-white/60 uppercase -mt-0.5">AI Detection System</span>
-            </div>
+    <div className="flex min-h-screen bg-bg">
+      <a
+        href="#main"
+        className="absolute top-2 -left-[9999px] z-[130] rounded-lg bg-brand px-3.5 py-2 text-on-brand focus:left-2"
+      >
+        Skip to content
+      </a>
+
+      {/* Desktop sidebar */}
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface lg:flex">
+        <div className="flex h-[72px] items-center px-5">
+          <Link href="/admin/dashboard" aria-label="Intyoza admin home">
+            <Brand className="h-10 w-auto" />
           </Link>
         </div>
-
-        <nav className="flex-grow p-4 space-y-2 mt-4">
-          {menuItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-lg transition-all group',
-                pathname === item.href
-                  ? 'bg-white/20 text-white shadow-lg'
-                  : 'text-white/60 hover:bg-white/10 hover:text-white'
-              )}
-            >
-              <item.icon
-                size={22}
-                className={cn(
-                  'transition-colors',
-                  pathname === item.href ? 'text-white' : 'group-hover:text-white'
-                )}
-              />
-              <span className="font-medium">{item.name}</span>
-            </Link>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-white/10">
+        <div className="px-5 pb-2">
+          <span className="tag tag-brand">Admin console</span>
+        </div>
+        <div className="flex-1 overflow-y-auto px-3 py-3">
+          <NavLinks pathname={pathname} />
+        </div>
+        <div className="space-y-3 border-t border-line p-4">
+          <PrivacyNote />
           <button
+            type="button"
             onClick={() => setShowLogoutModal(true)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all group"
+            className="flex w-full items-center gap-3 rounded-full px-4 py-2.5 font-medium text-danger transition hover:bg-danger-soft"
           >
-            <TbLogout size={22} className="group-hover:translate-x-0.5 transition-transform" />
-            <span className="font-medium">Logout</span>
+            <TbLogout size={20} /> Log out
           </button>
         </div>
       </aside>
 
-      <div className="flex-grow flex flex-col min-w-0">
-        <header className="h-16 lg:h-20 bg-white border-b border-border sticky top-0 z-30 px-4 lg:px-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 text-primary">
-              <TbMenu2 size={24} />
-            </button>
-            <h1 className="text-lg lg:text-xl font-bold text-primary">
-              {menuItems.find((m) => m.href === pathname)?.name || 'Admin Panel'}
-            </h1>
-          </div>
-
-          {/* Profile Dropdown */}
-          <div className="relative" ref={dropdownRef}>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 border-b border-line bg-bg/90 backdrop-blur-md">
+          <div className="flex h-[72px] items-center gap-3 px-4 lg:px-8">
             <button
-              onClick={() => setProfileOpen((v) => !v)}
-              className="flex items-center gap-2 hover:bg-muted/40 rounded-xl px-3 py-2 transition-all"
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="icon-btn lg:hidden"
+              aria-label="Open menu"
             >
-              <div className="hidden md:flex flex-col items-end mr-1">
-                <span className="text-sm font-bold text-primary leading-none">{userName || 'Admin'}</span>
-                <span className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate max-w-40">{userEmail || 'Administrator'}</span>
-              </div>
-              <div className="w-10 h-10 lg:w-11 lg:h-11 bg-accent rounded-full border-2 border-white shadow-sm flex items-center justify-center">
-                <span className="text-white font-bold text-sm">{userInitials}</span>
-              </div>
-              <TbChevronDown
-                size={16}
-                className={cn('text-muted-foreground transition-transform duration-200', profileOpen && 'rotate-180')}
-              />
+              <TbMenu2 size={20} />
             </button>
+            <div className="lg:hidden">
+              <Brand className="h-8 w-auto" />
+            </div>
+            <p className="m-0 hidden text-[0.9rem] text-muted lg:block">
+              Intyoza admin <span aria-hidden="true">/</span>{' '}
+              <span className="font-semibold text-fg">{current?.name || 'Overview'}</span>
+            </p>
 
-            <AnimatePresence>
-              {profileOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-2xl border border-border z-50 overflow-hidden"
+            <div className="ml-auto flex items-center gap-2.5">
+              <ThemeToggle />
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen((v) => !v)}
+                  aria-expanded={profileOpen}
+                  aria-haspopup="menu"
+                  className="flex items-center gap-2 rounded-full border border-line bg-surface py-1 pr-3 pl-1 transition hover:bg-surface-2"
                 >
-                  <Link
-                    href="/admin/profile"
-                    onClick={() => setProfileOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 text-sm text-primary hover:bg-muted/40 transition-colors"
-                  >
-                    <TbUser size={18} className="text-accent" />
-                    <span className="font-semibold">Profile</span>
-                  </Link>
-                  <div className="border-t border-border" />
-                  <button
-                    onClick={() => setShowLogoutModal(true)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-50 transition-colors"
-                  >
-                    <TbLogout size={18} />
-                    <span className="font-semibold">Logout</span>
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  <span className="grid size-8 place-items-center rounded-full bg-brand text-[0.8rem] font-bold text-on-brand">
+                    {initialsOf(displayName)}
+                  </span>
+                  <span className="hidden max-w-40 truncate text-[0.9rem] font-semibold md:block">{displayName}</span>
+                  <TbChevronDown size={16} className={cn('text-muted transition-transform', profileOpen && 'rotate-180')} />
+                </button>
+
+                <AnimatePresence>
+                  {profileOpen && (
+                    <motion.div
+                      role="menu"
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute top-full right-0 z-50 mt-2 w-60 overflow-hidden rounded-[14px] border border-line bg-surface shadow-card"
+                    >
+                      <div className="border-b border-line px-4 py-3">
+                        <p className="m-0 truncate font-semibold">{displayName}</p>
+                        <p className="m-0 truncate text-[0.8rem] text-muted">{user.email || 'Administrator'}</p>
+                      </div>
+                      <Link
+                        href="/admin/profile"
+                        role="menuitem"
+                        onClick={() => setProfileOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 text-[0.92rem] no-underline hover:bg-surface-2"
+                      >
+                        <TbUser size={18} className="text-brand" /> Profile & password
+                      </Link>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setProfileOpen(false);
+                          setShowLogoutModal(true);
+                        }}
+                        className="flex w-full items-center gap-3 border-t border-line px-4 py-3 text-[0.92rem] text-danger hover:bg-danger-soft"
+                      >
+                        <TbLogout size={18} /> Log out
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
           </div>
         </header>
 
-        <main className="p-4 lg:p-8 flex-grow">
-          <div className="max-w-6xl mx-auto">{children}</div>
+        <main id="main" className="flex-1 px-4 py-6 lg:px-8 lg:py-8">
+          <div className="mx-auto max-w-[1160px]">{children}</div>
         </main>
       </div>
 
-      {/* Mobile Sidebar */}
+      {/* Mobile sidebar */}
       <AnimatePresence>
         {sidebarOpen && (
           <>
@@ -260,46 +246,32 @@ export default function AdminLayout({ children }) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSidebarOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] lg:hidden"
+              className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm lg:hidden"
             />
             <motion.aside
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
-              className="fixed inset-y-0 left-0 w-72 bg-primary text-white z-[101] shadow-2xl lg:hidden flex flex-col"
+              transition={{ type: 'tween', duration: 0.2 }}
+              className="fixed inset-y-0 left-0 z-[101] flex w-72 flex-col bg-surface shadow-card lg:hidden"
             >
-              <div className="p-6 flex items-center justify-between border-b border-white/5">
-                <div className="flex items-center gap-3">
-                  <Image src="/icon.png" alt="AgriWatch" width={34} height={34} className="rounded-xl" />
-                  <span className="text-xl font-bold tracking-tighter">AGRIWATCH</span>
-                </div>
-                <button onClick={() => setSidebarOpen(false)}>
-                  <TbX size={24} />
+              <div className="flex h-[72px] items-center justify-between px-5">
+                <Brand className="h-9 w-auto" />
+                <button type="button" className="icon-btn" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
+                  <TbX size={20} />
                 </button>
               </div>
-              <nav className="flex-grow p-4 space-y-2 mt-4">
-                {menuItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setSidebarOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 px-4 py-3 rounded-lg transition-all',
-                      pathname === item.href ? 'bg-white/20' : 'hover:bg-white/10'
-                    )}
-                  >
-                    <item.icon size={22} />
-                    <span className="font-medium">{item.name}</span>
-                  </Link>
-                ))}
-              </nav>
-              <div className="p-4 border-t border-white/10">
+              <div className="flex-1 overflow-y-auto px-3 py-3">
+                <NavLinks pathname={pathname} onNavigate={() => setSidebarOpen(false)} />
+              </div>
+              <div className="space-y-3 border-t border-line p-4">
+                <PrivacyNote />
                 <button
+                  type="button"
                   onClick={() => setShowLogoutModal(true)}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all group"
+                  className="flex w-full items-center gap-3 rounded-full px-4 py-2.5 font-medium text-danger hover:bg-danger-soft"
                 >
-                  <TbLogout size={22} className="group-hover:translate-x-0.5 transition-transform" />
-                  <span className="font-medium">Logout</span>
+                  <TbLogout size={20} /> Log out
                 </button>
               </div>
             </motion.aside>
@@ -307,52 +279,23 @@ export default function AdminLayout({ children }) {
         )}
       </AnimatePresence>
 
-      {/* Logout Confirmation Modal */}
-      <AnimatePresence>
-        {showLogoutModal && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center relative overflow-hidden"
-            >
-              <h3 className="text-2xl font-bold text-primary mb-3">Confirm Logout</h3>
-              <p className="text-muted-foreground mb-8">
-                Are you sure you want to log out? You will need to sign in again to access the admin portal.
-              </p>
-
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setShowLogoutModal(false)}
-                  disabled={isLoggingOut}
-                  className="flex-1 py-3 border border-border rounded-xl font-bold text-muted-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleLogout}
-                  disabled={isLoggingOut}
-                  className="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isLoggingOut ? (
-                    <>
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                        className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
-                      />
-                      <span>Logging out...</span>
-                    </>
-                  ) : (
-                    'Confirm Logout'
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <Dialog open={showLogoutModal} onClose={() => !isLoggingOut && setShowLogoutModal(false)} title="Log out?">
+        <p className="mb-6 text-muted">You will need to sign in again to use the Intyoza admin console.</p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            className="btn btn-ghost flex-1"
+            onClick={() => setShowLogoutModal(false)}
+            disabled={isLoggingOut}
+          >
+            Cancel
+          </button>
+          <button type="button" className="btn btn-danger flex-1" onClick={handleLogout} disabled={isLoggingOut}>
+            {isLoggingOut && <TbLoader2 className="animate-spin" size={18} />}
+            {isLoggingOut ? 'Logging out…' : 'Log out'}
+          </button>
+        </div>
+      </Dialog>
     </div>
   );
 }

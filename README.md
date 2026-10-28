@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Intyoza Admin
 
-## Getting Started
+Admin console for [Intyoza](../Intyoza-SRH-Platform), the youth sexual and reproductive health platform.
+It uses the same design tokens as the Intyoza web app (purple brand, light/dark themes).
 
-First, run the development server:
+## Getting started
 
 ```bash
+cp .env.example .env.local   # set NEXT_PUBLIC_ADMIN_DEMO=true to preview without a backend
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 — you are redirected to `/admin/login`.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Sections
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Page | What it is for |
+|---|---|
+| Dashboard | Sign-ups, AI conversations, topics, age groups, language, and what needs attention |
+| Users | Aliases, age group, language, role changes, deletion (no chat content is ever shown) |
+| AI Safety | Escalations raised by Intyoza AI and follow-up status |
+| Community | Pre-moderation queue and reported posts |
+| Learning | Lessons, quizzes and Myth Buster content |
+| Services | Health facilities that Intyoza refers people to |
+| Profile | Admin details and password |
 
-## Learn More
+## Backend endpoints
 
-To learn more about Next.js, take a look at the following resources:
+The console expects these endpoints on `NEXT_PUBLIC_API_URL` (see `src/lib/api.js`).
+Until an endpoint exists (404 or unreachable), its page shows **Sample data** from `src/data/sampleData.js`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `POST /auth/admin/login` → `{ token, user }` with `user.role === "ADMIN"`
+- `GET /auth/me`
+- `PATCH /admin/me`, `PUT /admin/me/password`
+- `GET /admin/overview`, `GET|PATCH|DELETE /admin/users[/:id]`
+- `GET /admin/ai/quality`, `GET|PATCH /admin/ai/escalations[/:id]`
+- `GET /admin/community/queue`, `GET /admin/community/groups`, `PATCH /admin/community/posts/:id`
+- `GET /admin/learning/lessons`, `GET /admin/myths`, `GET /admin/facilities`

@@ -22,7 +22,7 @@ export function PageHeader({ eyebrow, title, description, sample, children }) {
 }
 
 /** Shown when a page falls back to sample data because the backend endpoint is not there yet. */
-export function SampleBadge() {
+function SampleBadge() {
   return (
     <span
       className="tag tag-sun font-sans text-[0.72rem] tracking-normal"
@@ -34,7 +34,7 @@ export function SampleBadge() {
 }
 
 // Card background and icon colour per tone (full class names so Tailwind can see them).
-export const TONES = {
+const TONES = {
   brand: { soft: "bg-brand-soft", text: "text-brand" },
   teal: { soft: "bg-teal-soft", text: "text-teal-text" },
   accent: { soft: "bg-accent-soft", text: "text-accent-text" },
