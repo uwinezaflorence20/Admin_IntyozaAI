@@ -267,9 +267,6 @@
 
   .input,
   .select,
-  .textarea {
-    @apply min-h-11 w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-fg placeholder:text-muted focus:border-transparent focus:outline-2 focus:outline-offset-0 focus:outline-focus;
-  }
   .label {
     @apply mb-1.5 block text-[0.9rem] font-semibold;
   }
@@ -285,9 +282,6 @@
   }
   .notice-danger {
     @apply bg-danger-soft;
-  }
-  .notice-success {
-    @apply bg-success-soft;
   }
 
   .eyebrow {

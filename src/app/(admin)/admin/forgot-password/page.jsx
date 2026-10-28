@@ -1,134 +1,146 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { TbMail, TbArrowLeft } from 'react-icons/tb';
+import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import { TbMail, TbArrowLeft, TbMailOpened, TbRefresh, TbPencil } from 'react-icons/tb';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { motion } from 'framer-motion';
-import Link from 'next/link';
-import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
+import { AuthShell } from '@/components/admin/AuthShell';
 
 const forgotPasswordSchema = z.object({
-  email: z
-    .string()
-    .min(1, 'Email is required')
-    .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please enter a valid email address'),
+  email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
 });
+
+const RESEND_SECONDS = 30;
+
+// UI only: simulates the network request until a real backend is connected.
+const fakeRequest = () => new Promise((resolve) => setTimeout(resolve, 900));
 
 export default function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
+  const [sentTo, setSentTo] = useState('');
+  const [cooldown, setCooldown] = useState(0);
 
   const {
     register,
     handleSubmit,
-    reset,
     formState: { errors },
-  } = useForm({
-    resolver: zodResolver(forgotPasswordSchema),
-  });
+  } = useForm({ resolver: zodResolver(forgotPasswordSchema) });
 
-  const onSubmit = async (data) => {
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setTimeout(() => setCooldown(cooldown - 1), 1000);
+    return () => clearTimeout(id);
+  }, [cooldown]);
+
+  const onSubmit = async ({ email }) => {
     setIsLoading(true);
+    await fakeRequest();
+    setIsLoading(false);
+    setSentTo(email);
+    setCooldown(RESEND_SECONDS);
+  };
 
-    try {
-      const response = await fetch(
-        'https://agriwatch-backenf.onrender.com/auth/forgotPassword',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          body: JSON.stringify({
-            Email: data.email,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Failed to send reset link');
-      }
-
-      toast.success(result.message || 'Reset link sent to your email!');
-
-      reset();
-
-      setTimeout(() => {
-        router.push('/admin/login');
-      }, 2000);
-    } catch (error) {
-      toast.error(error.message || 'Something went wrong. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+  const onResend = async () => {
+    setIsLoading(true);
+    await fakeRequest();
+    setIsLoading(false);
+    setCooldown(RESEND_SECONDS);
+    toast.success('A new reset link has been sent.');
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#EBEFF5] relative p-6">
-      {/* Back Button */}
-      <div className="absolute top-8 left-8 z-20">
-        <Link
-          href="/admin/login"
-          className="flex items-center gap-2 text-white hover:text-accent hover:bg-white transition-colors text-sm font-bold uppercase tracking-widest bg-primary px-6 py-3 rounded border border-border shadow-md"
-        >
-          <TbArrowLeft size={20} /> Back
-        </Link>
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-lg bg-white p-12 md:p-20 shadow-[0_0_50px_rgba(0,0,0,0.05)] rounded-sm"
-      >
-        <div className="text-center mb-12">
-          <h1 className="text-2xl font-semibold text-primary mb-6 tracking-tight uppercase">
-            Forgot Password
-          </h1>
-        </div>
-
-        <form className="space-y-8" onSubmit={handleSubmit(onSubmit)}>
-          <div className="space-y-2">
-            <div className="text-lg font-medium text-primary/60 mb-4">
-              Enter Email Address
+    <AuthShell
+      title={sentTo ? 'Check your email' : 'Forgot your password?'}
+      subtitle={
+        sentTo
+          ? null
+          : "No worries. Enter the email of your admin account and we'll send you a link to choose a new password."
+      }
+    >
+      <AnimatePresence mode="wait">
+        {sentTo ? (
+          <motion.div
+            key="sent"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+          >
+            <div className="mb-6 flex items-start gap-4 rounded-2xl border border-border bg-teal-soft p-5">
+              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-bg text-teal-text">
+                <TbMailOpened size={22} />
+              </span>
+              <p className="m-0 text-[0.95rem]">
+                If <strong className="break-all">{sentTo}</strong> belongs to an admin account, a reset link is on
+                its way. The link expires in 30 minutes.
+              </p>
             </div>
 
-            <Input
-              {...register('email')}
-              placeholder="jmlustitia@gmail.com"
-              icon={TbMail}
-              className={`h-14 border-primary border-[1px] ${
-                errors.email ? 'border-red-500' : ''
-              }`}
-            />
+            <ol className="mb-6 space-y-2 pl-5 text-[0.9rem] text-muted">
+              <li>Open the email from Intyoza.</li>
+              <li>Click <strong className="text-fg">Reset password</strong>.</li>
+              <li>Choose a new password and sign in.</li>
+            </ol>
 
-            {errors.email && (
-              <p className="text-sm font-medium text-red-500 ml-1">
-                {errors.email.message}
-              </p>
-            )}
-          </div>
+            <Button onClick={onResend} isLoading={isLoading} disabled={cooldown > 0} className="w-full">
+              <TbRefresh size={18} />
+              {cooldown > 0 ? `Resend link in ${cooldown}s` : 'Resend link'}
+            </Button>
 
-          <Button
-            type="submit"
-            variant="primary"
-            isLoading={isLoading}
-            className="w-full h-14 text-sm font-medium uppercase"
+            <button
+              type="button"
+              onClick={() => setSentTo('')}
+              className="btn btn-ghost mt-2 w-full"
+            >
+              <TbPencil size={18} /> Use a different email
+            </button>
+
+            <p className="mt-4 text-center text-[0.8rem] text-muted">
+              Design preview:{' '}
+              <Link href="/admin/reset-password/demo" className="font-semibold text-brand hover:underline">
+                open the reset page
+              </Link>
+            </p>
+          </motion.div>
+        ) : (
+          <motion.form
+            key="form"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="space-y-4"
+            onSubmit={handleSubmit(onSubmit)}
+            noValidate
           >
-            {isLoading ? 'Sending...' : 'Send'}
-          </Button>
-        </form>
+            <div>
+              <label htmlFor="email" className="label">Email</label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                {...register('email')}
+                placeholder="you@intyoza.rw"
+                icon={TbMail}
+                aria-invalid={!!errors.email}
+                className={errors.email ? 'border-danger' : ''}
+              />
+              {errors.email && <p className="field-error">{errors.email.message}</p>}
+            </div>
+            <Button type="submit" isLoading={isLoading} className="w-full">
+              {isLoading ? 'Sending…' : 'Send reset link'}
+            </Button>
+          </motion.form>
+        )}
+      </AnimatePresence>
 
-        <div className="mt-12 text-center text-muted-foreground/70 text-[0.9rem] leading-relaxed px-4">
-          The email must be the one associated with your account.
-        </div>
-      </motion.div>
-    </div>
+      <Link href="/admin/login" className="btn btn-ghost mt-2 w-full">
+        <TbArrowLeft size={18} /> Back to sign in
+      </Link>
+    </AuthShell>
   );
 }

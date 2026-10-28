@@ -34,12 +34,12 @@ export function getSession() {
   }
 }
 
-export function saveSession(token, user) {
+function saveSession(token, user) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
-export function clearSession() {
+function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
 }
@@ -48,7 +48,7 @@ const isDemoSession = () => getSession()?.token === DEMO_TOKEN;
 
 /* ---------- Core request ---------- */
 
-export async function apiCall(endpoint, { body, ...options } = {}) {
+async function apiCall(endpoint, { body, ...options } = {}) {
   const token = getSession()?.token;
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
@@ -112,12 +112,6 @@ export async function logout() {
   }
   clearSession();
 }
-
-export const requestPasswordReset = (email) =>
-  apiCall("/auth/admin/forgot-password", { method: "POST", body: { email } });
-
-export const resetPassword = (token, password) =>
-  apiCall("/auth/admin/reset-password", { method: "POST", body: { token, password } });
 
 /* ---------- Profile ---------- */
 

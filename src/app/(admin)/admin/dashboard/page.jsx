@@ -1,312 +1,215 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  TbChecklist, TbLoader2, TbBrain,
-  TbUser, TbMail, TbInbox, TbCalendar, TbPhone,
+  TbUsers, TbSparkles, TbAlertTriangle, TbMessages, TbArrowRight, TbClock, TbFlag, TbCircleCheck,
 } from "react-icons/tb";
-import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip,
-} from "recharts";
-
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { motion } from "framer-motion";
-
-import {
-  getRecentActivities,
-  getModelMetrics,
-  getAllUsers,
-  getAgriContacts,
-} from "@/lib/api";
-
+import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { getEscalations, getModerationQueue, getOverview, getSession } from "@/lib/api";
+import { LANGUAGE_LABELS } from "@/data/sampleData";
+import { PageHeader, StatCard, Panel, Loading, EmptyState, chartTooltip, chartAxis } from "@/components/admin/parts";
+import { timeAgo } from "@/lib/utils";
 
-const MONTHS_BACK = 6;
+const fmt = (n) => (typeof n === "number" ? n.toLocaleString("en-GB") : "—");
 
-function groupByMonth(items, dateKey = "createdAt") {
-  const now = new Date();
-  const buckets = [];
-  for (let i = MONTHS_BACK - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    buckets.push({ key: `${d.getFullYear()}-${d.getMonth()}`, month: d.toLocaleDateString("en-GB", { month: "short" }), count: 0 });
-  }
-  items.forEach((item) => {
-    const date = new Date(item?.[dateKey]);
-    if (isNaN(date)) return;
-    const key = `${date.getFullYear()}-${date.getMonth()}`;
-    const bucket = buckets.find((b) => b.key === key);
-    if (bucket) bucket.count += 1;
-  });
-  return buckets.map(({ month, count }) => ({ month, count }));
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+
+/** Horizontal meters with the value printed beside each bar, so no legend is needed. */
+function Meters({ rows, labelKey, valueKey }) {
+  const max = Math.max(...rows.map((r) => r[valueKey]), 1);
+  return (
+    <ul className="m-0 list-none space-y-3 p-0">
+      {rows.map((row) => (
+        <li key={row[labelKey]}>
+          <div className="mb-1 flex justify-between gap-3 text-[0.88rem]">
+            <span>{row[labelKey]}</span>
+            <span className="font-semibold tabular-nums">{fmt(row[valueKey])}</span>
+          </div>
+          <div className="h-2 rounded-full bg-surface-2">
+            <div className="h-2 rounded-full bg-brand" style={{ width: `${(row[valueKey] / max) * 100}%` }} />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export default function DashboardPage() {
   const router = useRouter();
-
-  const [stats, setStats] = useState([
-    { label: "Total Inquiries", value: "...", icon: TbChecklist, color: "bg-orange-500" },
-    { label: "Total Users",     value: "...", icon: TbUser,      color: "bg-green-500"  },
-  ]);
-
-  const [modelAccuracy, setModelAccuracy] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [inquiries, setInquiries] = useState([]);
-  const [userSignups, setUserSignups] = useState([]);
-  const [userActivity, setUserActivity] = useState([]);
-
-  const fetchModelAccuracy = async () => {
-    try {
-      const data = await getModelMetrics();
-      setModelAccuracy(data.test_accuracy);
-    } catch {
-      setModelAccuracy("error");
-    }
-  };
-
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const raw = localStorage.getItem("token");
-      const token = raw && raw !== "undefined" ? raw : "";
-
-      const [activitiesResult, contactsResult, usersResult] =
-        await Promise.allSettled([
-          getRecentActivities(),
-          getAgriContacts(),
-          getAllUsers(token),
-        ]);
-
-      const activitiesData =
-        activitiesResult.status === "fulfilled"
-          ? Array.isArray(activitiesResult.value)
-            ? activitiesResult.value
-            : activitiesResult.value?.data || []
-          : [];
-
-      const contacts =
-        contactsResult.status === "fulfilled"
-          ? contactsResult.value?.data || contactsResult.value?.contacts ||
-            (Array.isArray(contactsResult.value) ? contactsResult.value : [])
-          : [];
-
-      const usersData =
-        usersResult.status === "fulfilled" ? usersResult.value?.data || [] : [];
-
-      setInquiries(contacts);
-      setUserSignups(groupByMonth(usersData));
-      setUserActivity(groupByMonth(activitiesData));
-
-      setStats([
-        { label: "Total Inquiries", value: contacts.length.toString(),  icon: TbChecklist, color: "bg-orange-500" },
-        { label: "Total Users",     value: usersData.length.toString(), icon: TbUser,      color: "bg-green-500"  },
-      ]);
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to load dashboard data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [overview, setOverview] = useState(null);
+  const [escalations, setEscalations] = useState([]);
+  const [queue, setQueue] = useState([]);
+  const [sample, setSample] = useState(false);
+  const [name, setName] = useState("");
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      fetchDashboardData();
-      fetchModelAccuracy();
-    }, 0);
-    return () => clearTimeout(t);
+    let cancelled = false;
+    (async () => {
+      setName(getSession()?.user?.alias || "");
+      try {
+        const [o, e, q] = await Promise.all([getOverview(), getEscalations(), getModerationQueue()]);
+        if (cancelled) return;
+        setOverview(o.data);
+        setEscalations(e.data.filter((x) => x.status === "open"));
+        setQueue(q.data);
+        setSample(o.sample || e.sample || q.sample);
+      } catch (error) {
+        if (!cancelled) toast.error(error.message || "Could not load the dashboard");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const modelAccuracyValue =
-    modelAccuracy === null ? "..." : modelAccuracy === "error" ? "N/A" : `${modelAccuracy}%`;
+  if (!overview) return <Loading label="Loading dashboard…" />;
 
-  const allStats = [
-    ...stats,
-    {
-      label: "Model Accuracy",
-      value: modelAccuracyValue,
-      icon: TbBrain,
-      color: "bg-purple-500",
-      href: "/admin/model-performance",
-    },
-  ];
+  const { totals } = overview;
+  const languageTotal = Object.values(overview.languages).reduce((a, b) => a + b, 0) || 1;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Overview"
+        title={`${greeting()}${name ? `, ${name.split(" ")[0]}` : ""}`}
+        description="How young people are using Intyoza this week, and what needs your attention."
+        sample={sample}
+      />
 
-      {/* Stats — 5 cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-        {allStats.map((stat, idx) => (
-          <motion.div
-            key={idx}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.08 }}
-          >
-            <Card
-              onClick={stat.href ? () => router.push(stat.href) : undefined}
-              className={cn(
-                "border-none bg-white shadow-sm h-full hover:shadow-md transition-shadow",
-                stat.href && "cursor-pointer"
-              )}
-            >
-              <CardHeader className="flex flex-row items-center gap-3 pb-2 pt-4 px-4">
-                <div className={cn("p-3 rounded-full text-white shrink-0", stat.color)}>
-                  <stat.icon size={18} />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xl font-bold text-primary leading-tight">
-                    {stat.value}
-                  </div>
-                  <CardTitle className="text-xs text-muted-foreground font-medium leading-snug mt-0.5">
-                    {stat.label}
-                  </CardTitle>
-                </div>
-              </CardHeader>
-            </Card>
-          </motion.div>
-        ))}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={TbUsers} tone="brand" label="People on Intyoza" value={fmt(totals.users)} hint={`+${fmt(totals.newUsersThisWeek)} this week`} onClick={() => router.push("/admin/users")} />
+        <StatCard icon={TbSparkles} tone="teal" label="AI conversations" value={fmt(totals.conversations)} hint={`${fmt(totals.lessonsCompleted)} lessons completed`} />
+        <StatCard icon={TbAlertTriangle} tone="accent" label="Open escalations" value={fmt(totals.openEscalations)} hint="Referred to a service" onClick={() => router.push("/admin/ai-safety")} />
+        <StatCard icon={TbMessages} tone="sun" label="Posts to review" value={fmt(totals.pendingPosts)} hint="Community moderation" onClick={() => router.push("/admin/community")} />
       </div>
 
-      {/* User Growth & Engagement */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="border-none shadow-sm bg-white">
-          <CardHeader>
-            <CardTitle className="text-base">User Signups</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              How users have entered the system over the last 6 months
-            </p>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={userSignups}>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Panel title="New people" description="Sign-ups per week, last 8 weeks">
+          <div className="h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={overview.signups} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="signupGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0F8410" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#0F8410" stopOpacity={0} />
+                  <linearGradient id="signupFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.28} />
+                    <stop offset="100%" stopColor="var(--brand)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Area type="monotone" dataKey="count" name="New users" stroke="#0F8410" fill="url(#signupGradient)" strokeWidth={2} />
+                <CartesianGrid vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="week" {...chartAxis} />
+                <YAxis allowDecimals={false} {...chartAxis} />
+                <Tooltip {...chartTooltip} cursor={{ stroke: "var(--border)" }} />
+                <Area type="monotone" dataKey="count" name="Sign-ups" stroke="var(--brand)" strokeWidth={2} fill="url(#signupFill)" activeDot={{ r: 5, stroke: "var(--surface)", strokeWidth: 2 }} />
               </AreaChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          </div>
+        </Panel>
 
-        <Card className="border-none shadow-sm bg-white">
-          <CardHeader>
-            <CardTitle className="text-base">User Activity</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              How users are interacting with the platform over the last 6 months
-            </p>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={userActivity}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="count" name="Activities" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+        <Panel title="Questions to Intyoza AI" description="Conversations per week, last 8 weeks">
+          <div className="h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={overview.conversations} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="week" {...chartAxis} />
+                <YAxis allowDecimals={false} {...chartAxis} />
+                <Tooltip {...chartTooltip} />
+                <Bar dataKey="count" name="Conversations" fill="var(--teal)" radius={[4, 4, 0, 0]} maxBarSize={28} />
               </BarChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          </div>
+        </Panel>
       </div>
 
-      {/* Farmer Inquiries */}
-      <Card className="border-none shadow-sm bg-white">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <div>
-            <CardTitle className="text-base">Farmer Inquiries</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Latest contact messages from the AgriWatch platform
-            </p>
-          </div>
-          <button
-            onClick={() => router.push("/admin/contacts")}
-            className="text-xs font-semibold text-primary hover:underline underline-offset-2"
-          >
-            View all
-          </button>
-        </CardHeader>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel title="Most asked topics" description="Conversations by topic, all time">
+          <Meters rows={overview.topics} labelKey="topic" valueKey="count" />
+        </Panel>
 
-        <CardContent>
-          {loading ? (
-            <div className="flex justify-center py-10">
-              <TbLoader2 className="animate-spin text-primary" size={24} />
-            </div>
-          ) : inquiries.length === 0 ? (
-            <div className="flex flex-col items-center py-10 text-muted-foreground gap-2">
-              <TbInbox size={32} className="opacity-30" />
-              <p className="text-sm">No inquiries yet</p>
-            </div>
+        <Panel title="Age groups" description="Self-reported during onboarding">
+          <Meters rows={overview.ageBands} labelKey="band" valueKey="count" />
+        </Panel>
+
+        <Panel title="Language" description="Share of people by app language">
+          <div className="flex h-3 overflow-hidden rounded-full bg-surface-2">
+            {Object.entries(overview.languages).map(([code, n], i) => (
+              <div
+                key={code}
+                className={i === 0 ? "bg-brand" : "bg-accent"}
+                style={{ width: `${(n / languageTotal) * 100}%`, marginLeft: i ? 2 : 0 }}
+              />
+            ))}
+          </div>
+          <ul className="mt-4 mb-0 list-none space-y-2.5 p-0">
+            {Object.entries(overview.languages).map(([code, n], i) => (
+              <li key={code} className="flex items-center justify-between text-[0.92rem]">
+                <span className="flex items-center gap-2">
+                  <span className={`size-2.5 rounded-full ${i === 0 ? "bg-brand" : "bg-accent"}`} aria-hidden="true" />
+                  {LANGUAGE_LABELS[code] || code}
+                </span>
+                <span className="font-semibold tabular-nums">{Math.round((n / languageTotal) * 100)}%</span>
+              </li>
+            ))}
+          </ul>
+          <div className="notice mt-5 text-[0.85rem]">
+            <TbSparkles size={16} className="text-brand" />
+            <p className="m-0">Keep new lessons available in Kinyarwanda first — most people use it.</p>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Panel
+          title="Urgent safety referrals"
+          description="Conversations where Intyoza AI pointed someone to care"
+          action={<Link href="/admin/ai-safety" className="btn btn-ghost btn-sm">View all <TbArrowRight size={16} /></Link>}
+        >
+          {escalations.length === 0 ? (
+            <EmptyState icon={TbCircleCheck} title="Nothing open" text="Every escalation has been followed up." />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                    <th className="pb-3 font-semibold pr-4">Name</th>
-                    <th className="pb-3 font-semibold pr-4">Email</th>
-                    <th className="pb-3 font-semibold pr-4">Phone</th>
-                    <th className="pb-3 font-semibold pr-4">Message</th>
-                    <th className="pb-3 font-semibold">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {inquiries.slice(0, 5).map((item, i) => (
-                    <motion.tr
-                      key={item._id || i}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="hover:bg-muted/20 transition-colors cursor-pointer"
-                      onClick={() => router.push("/admin/contacts")}
-                    >
-                      <td className="py-3 pr-4 font-medium text-primary whitespace-nowrap">
-                        <span className="flex items-center gap-1.5">
-                          <TbUser size={14} className="text-muted-foreground shrink-0" />
-                          {item.name || "—"}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4 text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <TbMail size={13} />
-                          {item.email || "—"}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4 text-muted-foreground whitespace-nowrap">
-                        <span className="flex items-center gap-1">
-                          <TbPhone size={13} />
-                          {item.phone || item.phoneNumber || "—"}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4 text-muted-foreground max-w-xs truncate">
-                        {item.message || "—"}
-                      </td>
-                      <td className="py-3 text-muted-foreground whitespace-nowrap">
-                        <span className="flex items-center gap-1">
-                          <TbCalendar size={13} />
-                          {item.createdAt
-                            ? new Date(item.createdAt).toLocaleDateString("en-GB", {
-                                day: "2-digit", month: "short", year: "numeric",
-                              })
-                            : "—"}
-                        </span>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ul className="m-0 list-none divide-y divide-line p-0">
+              {escalations.slice(0, 4).map((e) => (
+                <li key={e.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                  <span className={`tag ${e.level === "urgent" ? "tag-danger" : "tag-sun"} mt-0.5 capitalize`}>{e.level}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 font-semibold">{e.topic}</p>
+                    <p className="m-0 truncate text-[0.85rem] text-muted">{e.reason} · {e.referredTo}</p>
+                  </div>
+                  <span className="flex shrink-0 items-center gap-1 text-[0.8rem] text-muted"><TbClock size={14} />{timeAgo(e.createdAt)}</span>
+                </li>
+              ))}
+            </ul>
           )}
-        </CardContent>
-      </Card>
+        </Panel>
+
+        <Panel
+          title="Community queue"
+          description="Posts waiting for a moderator"
+          action={<Link href="/admin/community" className="btn btn-ghost btn-sm">Moderate <TbArrowRight size={16} /></Link>}
+        >
+          {queue.length === 0 ? (
+            <EmptyState icon={TbCircleCheck} title="Queue is clear" text="No posts are waiting for review." />
+          ) : (
+            <ul className="m-0 list-none divide-y divide-line p-0">
+              {queue.slice(0, 4).map((p) => (
+                <li key={p.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                  <span className={`tag ${p.status === "reported" ? "tag-accent" : "tag-brand"} mt-0.5`}>
+                    {p.status === "reported" ? <><TbFlag size={12} /> {p.reports}</> : "New"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 truncate text-[0.92rem]">{p.text}</p>
+                    <p className="m-0 text-[0.8rem] text-muted">{p.community} · {timeAgo(p.createdAt)}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
     </div>
   );
 }
