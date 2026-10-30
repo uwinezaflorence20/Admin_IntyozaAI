@@ -3,15 +3,21 @@
 Admin console for [Intyoza](../Intyoza-SRH-Platform), the youth sexual and reproductive health platform.
 It uses the same design tokens as the Intyoza web app (purple brand, light/dark themes).
 
+Built with React 19, TypeScript, Vite, React Router and Tailwind CSS 4.
+
 ## Getting started
 
 ```bash
-cp .env.example .env.local   # set NEXT_PUBLIC_ADMIN_DEMO=true to preview without a backend
+cp .env.example .env.local   # set VITE_ADMIN_DEMO=true to preview without a backend
 npm install
 npm run dev
 ```
 
 Open http://localhost:3000 — you are redirected to `/admin/login`.
+
+Other scripts: `npm run build` (typecheck + production build to `dist/`), `npm run preview`, `npm run lint`, `npm run typecheck`.
+
+When deploying `dist/`, configure the host to serve `index.html` for every route (SPA fallback), so links like `/admin/users` work on reload.
 
 ## Sections
 
@@ -27,8 +33,8 @@ Open http://localhost:3000 — you are redirected to `/admin/login`.
 
 ## Backend endpoints
 
-The console expects these endpoints on `NEXT_PUBLIC_API_URL` (see `src/lib/api.js`).
-Until an endpoint exists (404 or unreachable), its page shows **Sample data** from `src/data/sampleData.js`.
+The console expects these endpoints on `VITE_API_URL` (see `src/lib/api.ts`).
+Until an endpoint exists (404 or unreachable), its page shows **Sample data** from `src/data/sampleData.ts`.
 
 - `POST /auth/admin/login` → `{ token, user }` with `user.role === "ADMIN"`
 - `GET /auth/me`
