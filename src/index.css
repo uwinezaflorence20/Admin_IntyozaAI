@@ -14,6 +14,7 @@
 
 /* Intyoza design tokens, shared with the Intyoza web app (Figma palette). */
 :root {
+  --auth-panel: #4a3187; /* Sign-in panel: stays deep purple with white text in both themes. */
   --brand: #6c4ab6;
   --brand-strong: #563a96;
   --brand-soft: #ede7f6;
@@ -128,6 +129,7 @@
 
 /* Tailwind colours read the variables above, so every utility follows light/dark automatically. */
 @theme inline {
+  --color-auth-panel: var(--auth-panel);
   --color-brand: var(--brand);
   --color-brand-strong: var(--brand-strong);
   --color-brand-soft: var(--brand-soft);
@@ -266,7 +268,9 @@
   }
 
   .input,
-  .select,
+  .select {
+    @apply block min-h-12 w-full rounded-[14px] border border-line bg-field px-4 py-2.5 text-fg outline-none transition placeholder:text-muted focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand-soft aria-invalid:border-danger;
+  }
   .label {
     @apply mb-1.5 block text-[0.9rem] font-semibold;
   }

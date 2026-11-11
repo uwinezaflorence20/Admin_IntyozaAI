@@ -4,11 +4,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
-import { TbMail, TbLock, TbEye, TbEyeOff, TbAlertCircle, TbFlask } from "react-icons/tb";
+import { TbMail, TbLock, TbEye, TbEyeOff, TbAlertCircle } from "react-icons/tb";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { AuthShell } from "@/components/admin/AuthShell";
-import { DEMO_MODE, login } from "@/lib/api";
+import { login } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 
 const loginSchema = z.object({
@@ -44,14 +44,7 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <AuthShell title="Sign in" subtitle="Use your Intyoza admin account to manage the platform.">
-      {DEMO_MODE && (
-        <div className="notice notice-warn mb-5 text-[0.88rem]">
-          <TbFlask size={18} />
-          <p className="m-0">Demo mode: any email and an 8+ character password will sign you in with sample data.</p>
-        </div>
-      )}
-
+    <AuthShell title="Welcome back" subtitle="Sign in to your Intyoza admin account.">
       <form className="space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
         <div>
           <label htmlFor="email" className="label">Email</label>
@@ -98,7 +91,7 @@ export default function AdminLoginPage() {
           </div>
         )}
 
-        <Button type="submit" isLoading={isLoading} className="mt-2 w-full">
+        <Button type="submit" size="lg" isLoading={isLoading} className="mt-2 w-full">
           {isLoading ? "Signing in…" : "Sign in"}
         </Button>
       </form>

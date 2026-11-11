@@ -1,104 +1,216 @@
 import { useEffect, useState } from "react";
-import { TbBook, TbVideo, TbHeadphones, TbListCheck, TbHelpCircle, TbFileText, TbEye } from "react-icons/tb";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { TbBook, TbCategory, TbVideo, TbHeadphones, TbListCheck, TbHelpCircle, TbFileText, TbPlus } from "react-icons/tb";
 import { toast } from "sonner";
-import { getLessons, getMyths } from "@/lib/api";
+import { createCategory, getArticles, getCategories, getMyths } from "@/lib/api";
 import type { IconType } from "react-icons";
-import { PageHeader, Panel, Loading, StatCard } from "@/components/admin/parts";
+import { Dialog, EmptyState, PageHeader, Panel, Loading, StatCard } from "@/components/admin/parts";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { errorMessage } from "@/lib/utils";
-import type { Lesson, Myth } from "@/types";
+import type { Article, ArticleFormat, Category, Myth, NewCategory } from "@/types";
 
-const FORMAT_ICON: Record<string, IconType> = { Article: TbFileText, Video: TbVideo, Audio: TbHeadphones, Quiz: TbListCheck, "Myth or fact": TbHelpCircle };
-const STATUS_TAG: Record<Lesson["status"], string> = { published: "tag-success", review: "tag-sun", draft: "" };
-const STATUS_LABEL: Record<Lesson["status"], string> = { published: "Published", review: "In review", draft: "Draft" };
+const FORMAT: Record<ArticleFormat, { icon: IconType; label: string }> = {
+  ARTICLE: { icon: TbFileText, label: "Article" },
+  VIDEO: { icon: TbVideo, label: "Video" },
+  AUDIO: { icon: TbHeadphones, label: "Audio" },
+  QUIZ: { icon: TbListCheck, label: "Quiz" },
+};
+
+const categorySchema = z.object({
+  nameEn: z.string().trim().min(1, "English name is required"),
+  nameRw: z.string().trim().min(1, "Kinyarwanda name is required"),
+  slug: z.string().trim().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use lowercase letters, numbers and hyphens"),
+});
+
+interface CategoryFormProps {
+  existing: Category[];
+  onCancel: () => void;
+  onCreated: (category: Category) => void;
+}
+
+function CategoryForm({ existing, onCancel, onCreated }: CategoryFormProps) {
+  const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<NewCategory>({
+    resolver: zodResolver(categorySchema),
+  });
+
+  const onSubmit = async (values: NewCategory) => {
+    // The backend answers a duplicate slug with a generic 500, so catch it here first.
+    if (existing.some((c) => c.slug === values.slug)) {
+      setError("slug", { message: "Another category already uses this slug" });
+      return;
+    }
+    try {
+      onCreated(await createCategory(values));
+      toast.success("Category created");
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not create the category"));
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      <div>
+        <label htmlFor="nameEn" className="label">Name in English</label>
+        <Input id="nameEn" {...register("nameEn")} aria-invalid={!!errors.nameEn} />
+        {errors.nameEn && <p className="field-error">{errors.nameEn.message}</p>}
+      </div>
+      <div>
+        <label htmlFor="nameRw" className="label">Name in Kinyarwanda</label>
+        <Input id="nameRw" {...register("nameRw")} aria-invalid={!!errors.nameRw} />
+        {errors.nameRw && <p className="field-error">{errors.nameRw.message}</p>}
+      </div>
+      <div>
+        <label htmlFor="slug" className="label">Slug</label>
+        <Input id="slug" placeholder="periods-puberty" {...register("slug")} aria-invalid={!!errors.slug} />
+        {errors.slug && <p className="field-error">{errors.slug.message}</p>}
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" isLoading={isSubmitting}>Create category</Button>
+      </div>
+    </form>
+  );
+}
 
 export default function LearningPage() {
-  const [lessons, setLessons] = useState<Lesson[] | null>(null);
+  const [articles, setArticles] = useState<Article[] | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [myths, setMyths] = useState<Myth[]>([]);
-  const [sample, setSample] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
 
   useEffect(() => {
-    Promise.all([getLessons(), getMyths()])
-      .then(([l, m]) => {
-        setLessons(l.data);
-        setMyths(m.data);
-        setSample(l.sample || m.sample);
+    Promise.all([getArticles(), getMyths(), getCategories()])
+      .then(([a, m, c]) => {
+        setArticles(a);
+        setMyths(m);
+        setCategories(c);
       })
-      .catch((error) => toast.error(errorMessage(error, "Could not load learning content")));
+      .catch((error) => setLoadError(errorMessage(error, "Could not load learning content")));
   }, []);
 
-  if (!lessons) return <Loading label="Loading learning content…" />;
+  if (loadError) return <EmptyState icon={TbBook} title="Could not load learning content" text={loadError} />;
+  if (!articles) return <Loading label="Loading learning content…" />;
 
-  const completions = lessons.reduce((sum, l) => sum + l.completions, 0);
+  const categoryName = (id: string) => categories.find((c) => c.id === id)?.nameEn ?? "—";
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Learn & Myth Buster"
         title="Learning content"
-        description="Lessons, quizzes and myth checks young people see in the Learn and Myths sections."
-        sample={sample}
+        description="Articles, quizzes and myth checks young people see in the Learn and Myths sections."
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon={TbBook} tone="lavender" label="Lessons" value={lessons.length} hint={`${lessons.filter((l) => l.status === "published").length} published`} />
-        <StatCard icon={TbListCheck} tone="teal" label="Completions" value={completions.toLocaleString("en-GB")} />
-        <StatCard icon={TbHelpCircle} tone="peach" label="Myths answered" value={myths.length} />
+        <StatCard icon={TbBook} tone="lavender" label="Articles" value={articles.length} />
+        <StatCard icon={TbCategory} tone="teal" label="Categories" value={categories.length} />
+        <StatCard icon={TbHelpCircle} tone="peach" label="Myth checks" value={myths.length} />
       </div>
+
+      <Panel
+        title="Categories"
+        description="Topics that group lessons in the Learn section"
+        action={<Button size="sm" onClick={() => setAddingCategory(true)}><TbPlus size={16} /> Add category</Button>}
+      >
+        {categories.length === 0 ? (
+          <EmptyState icon={TbCategory} title="No categories yet" text="Add the first category to start grouping lessons." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>English</th>
+                  <th>Kinyarwanda</th>
+                  <th>Slug</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map((c) => (
+                  <tr key={c.id}>
+                    <td className="font-semibold">{c.nameEn}</td>
+                    <td>{c.nameRw}</td>
+                    <td className="text-muted">{c.slug}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
+      <Dialog open={addingCategory} onClose={() => setAddingCategory(false)} title="Add category">
+        <CategoryForm
+          existing={categories}
+          onCancel={() => setAddingCategory(false)}
+          onCreated={(category) => {
+            setCategories((current) => [...current, category].sort((a, b) => a.nameEn.localeCompare(b.nameEn)));
+            setAddingCategory(false);
+          }}
+        />
+      </Dialog>
 
       <section className="card p-0">
         <div className="border-b border-line p-4">
-          <h2 className="m-0 text-[1.05rem] font-bold">Lessons</h2>
+          <h2 className="m-0 text-[1.05rem] font-bold">Articles</h2>
         </div>
-        <div className="overflow-x-auto">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Lesson</th>
-                <th>Format</th>
-                <th>Languages</th>
-                <th className="text-right">Completions</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lessons.map((l) => {
-                const Icon = FORMAT_ICON[l.format] || TbFileText;
-                return (
-                  <tr key={l.id}>
-                    <td>
-                      <p className="m-0 font-semibold">{l.title}</p>
-                      <p className="m-0 text-[0.8rem] text-muted">{l.category}</p>
-                    </td>
-                    <td className="whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5"><Icon size={16} className="text-brand" /> {l.format}</span>
-                    </td>
-                    <td>
-                      <div className="flex gap-1">
-                        {l.languages.map((lang) => <span key={lang} className="tag">{lang}</span>)}
-                      </div>
-                    </td>
-                    <td className="text-right tabular-nums">{l.completions.toLocaleString("en-GB")}</td>
-                    <td><span className={`tag ${STATUS_TAG[l.status]}`}>{STATUS_LABEL[l.status]}</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {articles.length === 0 ? (
+          <EmptyState icon={TbBook} title="No articles yet" text="Published learning articles will appear here." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Article</th>
+                  <th>Format</th>
+                  <th>Language</th>
+                  <th>Category</th>
+                </tr>
+              </thead>
+              <tbody>
+                {articles.map((a) => {
+                  const format = FORMAT[a.format] ?? FORMAT.ARTICLE;
+                  const Icon = format.icon;
+                  return (
+                    <tr key={a.id}>
+                      <td>
+                        <p className="m-0 font-semibold">{a.title}</p>
+                        {a.isLowData && <span className="tag tag-teal mt-1">Low-data</span>}
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5"><Icon size={16} className="text-brand" /> {format.label}</span>
+                      </td>
+                      <td><span className="tag">{a.language}</span></td>
+                      <td className="text-muted">{categoryName(a.categoryId)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
-      <Panel title="Myth Buster" description="Most viewed myth checks">
-        <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 md:grid-cols-2">
-          {myths.map((m) => (
-            <li key={m.id} className="rounded-[14px] bg-peach p-4">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className={`tag ${m.verdict === "Myth" ? "tag-accent" : "tag-success"}`}>{m.verdict}</span>
-                <span className="inline-flex items-center gap-1 text-[0.8rem] text-peach-text"><TbEye size={14} /> {m.views.toLocaleString("en-GB")}</span>
-              </div>
-              <p className="m-0 font-medium">“{m.myth}”</p>
-            </li>
-          ))}
-        </ul>
+      <Panel title="Myth Buster" description="Myth checks young people see in the Myths section">
+        {myths.length === 0 ? (
+          <EmptyState icon={TbHelpCircle} title="No myth checks yet" text="Myth/fact entries will appear here." />
+        ) : (
+          <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 md:grid-cols-2">
+            {myths.map((m) => (
+              <li key={m.id} className="rounded-[14px] bg-peach p-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="tag tag-accent">Myth</span>
+                  <span className="tag">{m.language}</span>
+                </div>
+                <p className="m-0 font-medium">“{m.mythText}”</p>
+                <p className="m-0 mt-2 text-[0.88rem] text-peach-text"><strong>Fact:</strong> {m.factText}</p>
+              </li>
+            ))}
+          </ul>
+        )}
       </Panel>
     </div>
   );

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { TbUser, TbMail, TbLock, TbEye, TbEyeOff, TbShieldCheck } from 'react-icons/tb';
 import { toast } from 'sonner';
 import { changePassword, getMe, updateProfile } from '@/lib/api';
-import { LANGUAGE_LABELS } from '@/data/sampleData';
+import { LANGUAGE_LABELS } from '@/lib/labels';
 import { PageHeader, Panel, Loading } from '@/components/admin/parts';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -130,7 +130,7 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Account" title="Profile" description="Your admin details and sign-in password." />
+      <PageHeader eyebrow="Account" title="Profile" description="Your admin details and sign-in password." notConnected />
 
       <section className="relative overflow-hidden rounded-[22px] bg-lavender p-6">
         <span className="absolute -top-8 -right-8 size-32 rounded-full bg-accent-soft" aria-hidden="true" />

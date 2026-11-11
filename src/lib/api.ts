@@ -1,41 +1,29 @@
-import {
-  SAMPLE_ADMIN,
-  SAMPLE_AI_QUALITY,
-  SAMPLE_COMMUNITIES,
-  SAMPLE_ESCALATIONS,
-  SAMPLE_FACILITIES,
-  SAMPLE_LESSONS,
-  SAMPLE_MYTHS,
-  SAMPLE_OVERVIEW,
-  SAMPLE_POSTS,
-  SAMPLE_USERS,
-} from "@/data/sampleData";
 import type {
-  AiQuality,
-  Community,
-  Escalation,
-  EscalationStatus,
+  AdminUser,
+  Article,
+  Category,
+  CommunityReport,
+  CommunitySpace,
   Facility,
-  Lesson,
-  ModerationDecision,
   Myth,
+  NewCategory,
+  NewFacility,
+  NewSpace,
+  PostComment,
   Overview,
   Post,
-  Role,
-  Sampled,
+  Referral,
+  ReferralStatus,
   Session,
+  SpacePost,
   User,
 } from "@/types";
 
-/** Intyoza backend (Express, mounted at /api/v1). */
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api/v1";
-
-/** Set VITE_ADMIN_DEMO=true to sign in without a backend and browse sample data. */
-export const DEMO_MODE = import.meta.env.VITE_ADMIN_DEMO === "true";
+/** Intyoza backend (Express, mounted at /api/v1). In development, Vite proxies this path to it. */
+const BASE_URL = import.meta.env.VITE_API_URL || "/api/v1";
 
 const TOKEN_KEY = "intyoza.admin.token";
 const USER_KEY = "intyoza.admin.user";
-const DEMO_TOKEN = "demo";
 
 /** Error thrown for a failed request, with the HTTP status when there was a response. */
 export class ApiError extends Error {
@@ -70,8 +58,6 @@ function clearSession() {
   localStorage.removeItem(USER_KEY);
 }
 
-const isDemoSession = () => getSession()?.token === DEMO_TOKEN;
-
 /* ---------- Core request ---------- */
 
 interface RequestOptions extends Omit<RequestInit, "body"> {
@@ -105,59 +91,40 @@ async function apiCall<T = any>(endpoint: string, { body, ...options }: RequestO
   return data;
 }
 
-/**
- * Reads an admin endpoint; when it is not available yet (demo session, network error or 404),
- * returns the sample data instead so the console still works. `sample: true` tells the page.
- */
-async function readOrSample<T>(endpoint: string, sample: T): Promise<Sampled<T>> {
-  if (isDemoSession()) return { data: sample, sample: true };
-  try {
-    const result = await apiCall(endpoint);
-    return { data: (result?.data ?? result) as T, sample: false };
-  } catch (error) {
-    if (error instanceof ApiError && error.status && error.status !== 404) throw error;
-    return { data: sample, sample: true };
-  }
+/** Reads an endpoint and returns its payload (the `data` field when the response has one). */
+async function read<T>(endpoint: string): Promise<T> {
+  const result = await apiCall(endpoint);
+  return (result?.data ?? result) as T;
 }
 
 /* ---------- Auth ---------- */
 
 export async function login(email: string, password: string): Promise<User> {
-  if (DEMO_MODE) {
-    const user = { ...SAMPLE_ADMIN, email };
-    saveSession(DEMO_TOKEN, user);
-    return user;
-  }
-  const result = await apiCall("/auth/admin/login", { method: "POST", body: { email, password } });
-  const token: string | undefined = result?.token || result?.accessToken;
-  const user: User | undefined = result?.user;
-  if (!token) throw new Error("Sign in failed: no token received.");
-  if (!user || user.role !== "ADMIN") throw new Error("This account does not have admin access.");
-  saveSession(token, user);
+  const result = await apiCall<{ token?: string; user?: User & { passwordHash?: string } }>("/auth/login", {
+    method: "POST",
+    body: { email, password },
+  });
+  if (!result.token || !result.user) throw new Error("Sign in failed: the server did not return a session.");
+  if (result.user.role !== "ADMIN") throw new Error("This account does not have admin access.");
+  // The backend includes the password hash in this response; never keep it in the browser.
+  const user = { ...result.user };
+  delete user.passwordHash;
+  saveSession(result.token, user);
   return user;
 }
 
-export async function logout() {
-  if (!isDemoSession()) {
-    await apiCall("/auth/logout", { method: "POST" }).catch(() => {});
-  }
+export function logout() {
   clearSession();
 }
 
 /* ---------- Profile ---------- */
 
 export async function getMe(): Promise<User> {
-  if (isDemoSession()) return getSession()!.user;
   const result = await apiCall("/auth/me");
   return result?.user ?? result;
 }
 
 export async function updateProfile(changes: Partial<User>): Promise<User> {
-  if (isDemoSession()) {
-    const user = { ...getSession()!.user, ...changes };
-    saveSession(DEMO_TOKEN, user);
-    return user;
-  }
   const result = await apiCall("/admin/me", { method: "PATCH", body: changes });
   const user: User = result?.user ?? result;
   saveSession(getSession()!.token, user);
@@ -165,26 +132,141 @@ export async function updateProfile(changes: Partial<User>): Promise<User> {
 }
 
 export async function changePassword(currentPassword: string, newPassword: string) {
-  if (isDemoSession()) return;
   await apiCall("/admin/me/password", { method: "PUT", body: { currentPassword, newPassword } });
 }
 
 /* ---------- Admin data ---------- */
 
-export const getOverview = () => readOrSample<Overview>("/admin/overview", SAMPLE_OVERVIEW);
-export const getUsers = () => readOrSample<User[]>("/admin/users", SAMPLE_USERS);
-export const getEscalations = () => readOrSample<Escalation[]>("/admin/ai/escalations", SAMPLE_ESCALATIONS);
-export const getAiQuality = () => readOrSample<AiQuality>("/admin/ai/quality", SAMPLE_AI_QUALITY);
-export const getModerationQueue = () => readOrSample<Post[]>("/admin/community/queue", SAMPLE_POSTS);
-export const getCommunities = () => readOrSample<Community[]>("/admin/community/groups", SAMPLE_COMMUNITIES);
-export const getLessons = () => readOrSample<Lesson[]>("/admin/learning/lessons", SAMPLE_LESSONS);
-export const getMyths = () => readOrSample<Myth[]>("/admin/myths", SAMPLE_MYTHS);
-export const getFacilities = () => readOrSample<Facility[]>("/admin/facilities", SAMPLE_FACILITIES);
+/** Read-only list of every registered user. The backend has no update/delete user route yet. */
+export async function getUsers(): Promise<AdminUser[]> {
+  return (await read<{ users: AdminUser[] }>("/admin/users")).users;
+}
 
-export const updateUserRole = (id: string, role: Role) =>
-  apiCall(`/admin/users/${id}`, { method: "PATCH", body: { role } });
-export const deleteUser = (id: string) => apiCall(`/admin/users/${id}`, { method: "DELETE" });
-export const updateEscalation = (id: string, status: EscalationStatus) =>
-  apiCall(`/admin/ai/escalations/${id}`, { method: "PATCH", body: { status } });
-export const moderatePost = (id: string, decision: ModerationDecision) =>
-  apiCall(`/admin/community/posts/${id}`, { method: "PATCH", body: { decision } });
+// These screens have their design but no backend endpoint yet, so they show empty states and make
+// no request. Replace each one with read() when its endpoint exists.
+export const getOverview = async (): Promise<Overview> => ({
+  totals: {},
+  signups: [],
+  conversations: [],
+  topics: [],
+  ageBands: [],
+  languages: {},
+});
+export const getModerationQueue = async (): Promise<Post[]> => [];
+
+/* ---------- Learning content ---------- */
+
+export async function getArticles(): Promise<Article[]> {
+  return (await read<{ articles: Article[] }>("/learning/articles")).articles;
+}
+
+export async function getMyths(): Promise<Myth[]> {
+  return (await read<{ myths: Myth[] }>("/myths")).myths;
+}
+
+/* ---------- Professional referrals ---------- */
+
+export async function getReferrals(): Promise<Referral[]> {
+  return (await read<{ referrals: Referral[] }>("/admin/referrals")).referrals;
+}
+
+export async function updateReferral(id: string, data: { status: ReferralStatus; notes?: string }): Promise<Referral> {
+  const result = await apiCall<{ referral: Referral }>(`/admin/referrals/${id}`, { method: "PATCH", body: data });
+  return result.referral;
+}
+
+/* ---------- Health facilities (Services) ---------- */
+
+/** GET /admin/facilities returns every facility, including those hidden from the app. */
+export async function getFacilities(): Promise<Facility[]> {
+  return (await read<{ facilities: Facility[] }>("/admin/facilities")).facilities;
+}
+
+export async function createFacility(facility: NewFacility): Promise<Facility> {
+  const result = await apiCall<{ facility: Facility }>("/admin/facilities", { method: "POST", body: facilityBody(facility) });
+  return result.facility;
+}
+
+export async function updateFacility(id: string, facility: NewFacility): Promise<Facility> {
+  const result = await apiCall<{ facility: Facility }>(`/admin/facilities/${id}`, { method: "PATCH", body: facilityBody(facility, true) });
+  return result.facility;
+}
+
+/**
+ * The backend passes this body straight to Prisma, so the related `services` must use Prisma's
+ * nested-write form. On update, the existing services are replaced.
+ */
+function facilityBody(facility: NewFacility, isUpdate = false) {
+  const { services, ...scalars } = facility;
+  const create = services.map((s) => ({ serviceName: s.serviceName, status: s.status, costType: s.costType }));
+  return { ...scalars, services: isUpdate ? { deleteMany: {}, create } : { create } };
+}
+
+/** The backend has no admin list route for categories, so this reads the public one. */
+export async function getCategories(): Promise<Category[]> {
+  return (await read<{ categories: Category[] }>("/learning/categories")).categories;
+}
+
+export async function createCategory(category: NewCategory): Promise<Category> {
+  const result = await apiCall<{ category: Category }>("/admin/learning/categories", { method: "POST", body: category });
+  return result.category;
+}
+
+
+/* ---------- Community ---------- */
+
+export async function getReports(): Promise<CommunityReport[]> {
+  return (await read<{ reports: CommunityReport[] }>("/admin/community/reports")).reports;
+}
+
+export const hidePost = (postId: string) => apiCall(`/admin/community/posts/${postId}/hide`, { method: "PATCH" });
+
+/** Resolve or dismiss a report so it leaves the pending queue. */
+export const resolveReport = (reportId: string, status: "RESOLVED" | "DISMISSED") =>
+  apiCall(`/admin/community/reports/${reportId}`, { method: "PATCH", body: { status } });
+
+/** Delete a post or comment entirely (for severe violations) — cannot be undone. */
+export const deletePost = (postId: string) => apiCall(`/admin/community/posts/${postId}`, { method: "DELETE" });
+export const deleteComment = (commentId: string) => apiCall(`/admin/community/comments/${commentId}`, { method: "DELETE" });
+export const deleteSpace = (spaceId: string) => apiCall(`/admin/community/spaces/${spaceId}`, { method: "DELETE" });
+
+export async function getSpaces(): Promise<CommunitySpace[]> {
+  return (await read<{ spaces: CommunitySpace[] }>("/community/spaces")).spaces;
+}
+
+export async function createSpace(space: NewSpace): Promise<CommunitySpace> {
+  const result = await apiCall<{ space: Omit<CommunitySpace, "_count"> }>("/community/spaces", { method: "POST", body: space });
+  return { ...result.space, _count: { posts: 0 } };
+}
+
+export async function getSpacePosts(spaceId: string): Promise<SpacePost[]> {
+  return (await read<{ posts: SpacePost[] }>(`/community/spaces/${spaceId}/posts`)).posts;
+}
+
+/** The signed-in admin, as the author of posts and comments they create here. */
+const sessionAuthor = () => {
+  const user = getSession()?.user;
+  return { id: user?.id ?? "", alias: user?.alias ?? null };
+};
+
+/** Posts as the signed-in admin. The response has no author or counts, so they are filled in here. */
+export async function createPost(spaceId: string, content: string): Promise<SpacePost> {
+  const { post } = await apiCall<{ post: Omit<SpacePost, "user" | "_count"> }>(`/community/spaces/${spaceId}/posts`, {
+    method: "POST",
+    body: { content },
+  });
+  return { ...post, user: sessionAuthor(), _count: { comments: 0, reports: 0 } };
+}
+
+/** Not in the swagger docs yet, but served by the backend. Hidden comments are left out. */
+export async function getComments(postId: string): Promise<PostComment[]> {
+  return (await read<{ comments: PostComment[] }>(`/community/posts/${postId}/comments`)).comments;
+}
+
+export async function createComment(postId: string, content: string): Promise<PostComment> {
+  const { comment } = await apiCall<{ comment: Omit<PostComment, "user"> }>(`/community/posts/${postId}/comments`, {
+    method: "POST",
+    body: { content },
+  });
+  return { ...comment, user: sessionAuthor() };
+}

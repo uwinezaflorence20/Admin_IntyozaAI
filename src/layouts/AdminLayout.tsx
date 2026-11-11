@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import {
-  TbLayoutDashboard, TbUsers, TbSparkles, TbMessages, TbBook, TbMapPin,
+  TbLayoutDashboard, TbUsers, TbMessages, TbBook, TbMapPin, TbPhoneCall,
   TbLogout, TbMenu2, TbX, TbUser, TbChevronDown, TbShieldLock, TbLoader2,
 } from 'react-icons/tb';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,10 +15,10 @@ import type { User } from '@/types';
 const MENU = [
   { name: 'Dashboard', href: '/admin/dashboard', icon: TbLayoutDashboard },
   { name: 'Users', href: '/admin/users', icon: TbUsers },
-  { name: 'AI Safety', href: '/admin/ai-safety', icon: TbSparkles },
   { name: 'Community', href: '/admin/community', icon: TbMessages },
   { name: 'Learning', href: '/admin/learning', icon: TbBook },
   { name: 'Services', href: '/admin/services', icon: TbMapPin },
+  { name: 'Referrals', href: '/admin/referrals', icon: TbPhoneCall },
   { name: 'Profile', href: '/admin/profile', icon: TbUser },
 ];
 
