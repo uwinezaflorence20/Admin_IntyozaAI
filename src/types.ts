@@ -113,6 +113,22 @@ export interface NewSpace {
   imageUrl?: string;
 }
 
+/** Body for PATCH /admin/community/spaces/{spaceId}; every field is optional. */
+export interface SpaceUpdate {
+  name?: string;
+  description?: string;
+  imageUrl?: string;
+  moderatorId?: string;
+}
+
+/** A user from GET /admin/community/spaces/{spaceId}/users (the docs do not describe the shape). */
+export interface SpaceMember {
+  id: string;
+  alias: string | null;
+  email?: string | null;
+  role?: Role;
+}
+
 /** Aliases can be empty, for example on admin accounts. */
 export interface Author {
   id: string;
@@ -156,6 +172,16 @@ export interface Article {
   categoryId: string;
 }
 
+/** Body for POST /admin/learning/articles. */
+export interface NewArticle {
+  categoryId: string;
+  language: Language;
+  title: string;
+  content: string;
+  format: ArticleFormat;
+  isLowData: boolean;
+}
+
 /** A myth/fact entry from GET /myths. */
 export interface Myth {
   id: string;
@@ -164,6 +190,8 @@ export interface Myth {
   factText: string;
   sources: string[];
 }
+
+export type NewMyth = Omit<Myth, "id">;
 
 export type ReferralStatus = "PENDING" | "CONTACTED" | "RESOLVED" | "CANCELLED";
 

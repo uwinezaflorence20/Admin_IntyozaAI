@@ -6,9 +6,13 @@ import type {
   CommunitySpace,
   Facility,
   Myth,
+  NewArticle,
   NewCategory,
   NewFacility,
+  NewMyth,
   NewSpace,
+  SpaceMember,
+  SpaceUpdate,
   PostComment,
   Overview,
   Post,
@@ -160,8 +164,18 @@ export async function getArticles(): Promise<Article[]> {
   return (await read<{ articles: Article[] }>("/learning/articles")).articles;
 }
 
+export async function createArticle(article: NewArticle): Promise<Article> {
+  const result = await apiCall("/admin/learning/articles", { method: "POST", body: article });
+  return result?.article ?? result?.data?.article ?? result;
+}
+
 export async function getMyths(): Promise<Myth[]> {
   return (await read<{ myths: Myth[] }>("/myths")).myths;
+}
+
+export async function createMyth(myth: NewMyth): Promise<Myth> {
+  const result = await apiCall("/admin/myths", { method: "POST", body: myth });
+  return result?.myth ?? result?.data?.myth ?? result;
 }
 
 /* ---------- Professional referrals ---------- */
@@ -190,6 +204,11 @@ export async function createFacility(facility: NewFacility): Promise<Facility> {
 export async function updateFacility(id: string, facility: NewFacility): Promise<Facility> {
   const result = await apiCall<{ facility: Facility }>(`/admin/facilities/${id}`, { method: "PATCH", body: facilityBody(facility, true) });
   return result.facility;
+}
+
+/** Bulk import (the docs describe it as loading the 625-facility list). Sends plain service lists, per FacilityInput. */
+export async function importFacilities(facilities: NewFacility[]) {
+  return apiCall("/admin/facilities/import", { method: "POST", body: { facilities } });
 }
 
 /**
@@ -237,6 +256,16 @@ export async function getSpaces(): Promise<CommunitySpace[]> {
 export async function createSpace(space: NewSpace): Promise<CommunitySpace> {
   const result = await apiCall<{ space: Omit<CommunitySpace, "_count"> }>("/community/spaces", { method: "POST", body: space });
   return { ...result.space, _count: { posts: 0 } };
+}
+
+export async function updateSpace(spaceId: string, changes: SpaceUpdate): Promise<Omit<CommunitySpace, "_count">> {
+  const result = await apiCall(`/admin/community/spaces/${spaceId}`, { method: "PATCH", body: changes });
+  return result?.space ?? result?.data?.space ?? result;
+}
+
+export async function getSpaceUsers(spaceId: string): Promise<SpaceMember[]> {
+  const result = await read<{ users: SpaceMember[] } | SpaceMember[]>(`/admin/community/spaces/${spaceId}/users`);
+  return Array.isArray(result) ? result : result.users;
 }
 
 export async function getSpacePosts(spaceId: string): Promise<SpacePost[]> {

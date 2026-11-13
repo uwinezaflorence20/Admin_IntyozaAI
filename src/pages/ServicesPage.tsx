@@ -3,10 +3,10 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  TbMapPin, TbHeartHandshake, TbAlertTriangle, TbCalendarCheck, TbBuildingHospital, TbPlus, TbPencil, TbTrash, TbEyeOff,
+  TbMapPin, TbHeartHandshake, TbAlertTriangle, TbCalendarCheck, TbBuildingHospital, TbPlus, TbPencil, TbTrash, TbEyeOff, TbFileUpload,
 } from "react-icons/tb";
 import { toast } from "sonner";
-import { createFacility, getFacilities, updateFacility } from "@/lib/api";
+import { createFacility, getFacilities, importFacilities, updateFacility } from "@/lib/api";
 import { Dialog, EmptyState, PageHeader, Loading, StatCard } from "@/components/admin/parts";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -215,6 +215,95 @@ function FacilityForm({ facility, onCancel, onSaved }: { facility: Facility | nu
   );
 }
 
+/**
+ * Reads a JSON file holding either an array of facilities or `{ "facilities": [...] }`, in the
+ * backend's FacilityInput shape. Returns the list, or throws with what is wrong.
+ */
+async function readFacilitiesFile(file: File): Promise<NewFacility[]> {
+  let data: unknown;
+  try {
+    data = JSON.parse(await file.text());
+  } catch {
+    throw new Error("This file is not valid JSON.");
+  }
+  const list = Array.isArray(data) ? data : (data as { facilities?: unknown })?.facilities;
+  if (!Array.isArray(list) || list.length === 0) throw new Error('Expected a list of facilities, or { "facilities": [...] }.');
+
+  const problems: string[] = [];
+  list.forEach((item, i) => {
+    const f = item as Partial<NewFacility>;
+    const missing = [
+      !f?.name && "name",
+      !f?.district && "district",
+      typeof f?.latitude !== "number" && "latitude",
+      typeof f?.longitude !== "number" && "longitude",
+    ].filter(Boolean);
+    if (missing.length) problems.push(`#${i + 1}${f?.name ? ` (${f.name})` : ""}: missing ${missing.join(", ")}`);
+  });
+  if (problems.length) {
+    const shown = problems.slice(0, 5).join("\n");
+    throw new Error(`${problems.length} facilit${problems.length === 1 ? "y has" : "ies have"} problems:\n${shown}${problems.length > 5 ? "\n…" : ""}`);
+  }
+  return list as NewFacility[];
+}
+
+function ImportForm({ onCancel, onImported }: { onCancel: () => void; onImported: () => Promise<void> }) {
+  const [fileName, setFileName] = useState("");
+  const [facilities, setFacilities] = useState<NewFacility[] | null>(null);
+  const [error, setError] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+
+  const pickFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setFileName(file.name);
+    setFacilities(null);
+    setError("");
+    try {
+      setFacilities(await readFacilitiesFile(file));
+    } catch (e) {
+      setError(errorMessage(e, "Could not read this file"));
+    }
+  };
+
+  const submit = async () => {
+    if (!facilities) return;
+    setIsImporting(true);
+    try {
+      await importFacilities(facilities);
+      toast.success(`Imported ${facilities.length} facilit${facilities.length === 1 ? "y" : "ies"}`);
+      await onImported();
+    } catch (e) {
+      toast.error(errorMessage(e, "Could not import the facilities"));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="m-0 text-[0.9rem] text-muted">
+        Upload a <strong className="text-fg">.json</strong> file with a list of facilities. Each one needs a name, district, latitude
+        and longitude; other fields follow the add-facility form.
+      </p>
+      <label className="flex cursor-pointer flex-col items-center gap-1 rounded-[14px] border border-dashed border-line px-4 py-5 text-center transition hover:border-brand hover:bg-surface-2 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand-soft">
+        <input type="file" accept=".json,application/json" className="sr-only" onChange={pickFile} disabled={isImporting} />
+        <TbFileUpload size={24} className="text-brand" />
+        <span className="text-[0.9rem] font-semibold">{fileName || "Choose a JSON file"}</span>
+        {facilities && <span className="text-[0.8rem] text-muted">{facilities.length} facilities ready to import</span>}
+      </label>
+      {error && <p className="field-error whitespace-pre-line" role="alert">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" disabled={isImporting} onClick={onCancel}>Cancel</Button>
+        <Button type="button" isLoading={isImporting} disabled={!facilities} onClick={submit}>
+          Import{facilities ? ` ${facilities.length}` : ""}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const STATUS_TAG: Record<AvailabilityStatus, string> = { YES: "tag-success", LIKELY: "tag-teal", NO: "tag-danger", UNKNOWN: "" };
 
 export default function ServicesPage() {
@@ -222,6 +311,7 @@ export default function ServicesPage() {
   const [loadError, setLoadError] = useState("");
   const [editing, setEditing] = useState<Facility | null>(null);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     getFacilities()
@@ -249,6 +339,7 @@ export default function ServicesPage() {
         title="Health services"
         description="Facilities Intyoza AI refers people to. Keep hours, services and youth-friendly status up to date."
       >
+        <Button variant="outline" onClick={() => setImporting(true)}><TbFileUpload size={16} /> Import</Button>
         <Button onClick={() => setAdding(true)}><TbPlus size={16} /> Add facility</Button>
       </PageHeader>
 
@@ -311,6 +402,21 @@ export default function ServicesPage() {
         <div className="max-h-[70vh] overflow-y-auto pr-1">
           <FacilityForm facility={editing} onCancel={() => { setAdding(false); setEditing(null); }} onSaved={upsert} />
         </div>
+      </Dialog>
+
+      <Dialog open={importing} onClose={() => setImporting(false)} title="Import facilities">
+        <ImportForm
+          onCancel={() => setImporting(false)}
+          onImported={async () => {
+            setImporting(false);
+            // The import response does not list the new rows, so reload them.
+            try {
+              setFacilities(await getFacilities());
+            } catch (error) {
+              toast.error(errorMessage(error, "Imported, but could not reload the list"));
+            }
+          }}
+        />
       </Dialog>
     </div>
   );
