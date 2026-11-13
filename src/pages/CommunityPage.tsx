@@ -3,16 +3,18 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  TbAlertCircle, TbChevronDown, TbCircleCheck, TbClock, TbEyeOff, TbFlag, TbLoader2, TbMessages, TbPhotoUp, TbPlus, TbSend, TbTrash, TbUsersGroup,
+  TbAlertCircle, TbChevronDown, TbCircleCheck, TbClock, TbEyeOff, TbFlag, TbLoader2, TbMessages, TbPencil, TbPhotoUp, TbPlus, TbSend, TbTrash, TbUsers, TbUsersGroup,
 } from "react-icons/tb";
 import { toast } from "sonner";
-import { createComment, createPost, createSpace, deleteSpace, getComments, getReports, getSpacePosts, getSpaces, hidePost, resolveReport } from "@/lib/api";
+import {
+  createComment, createPost, createSpace, deleteSpace, getComments, getReports, getSpacePosts, getSpaces, getSpaceUsers, getUsers, hidePost, resolveReport, updateSpace,
+} from "@/lib/api";
 import { Dialog, EmptyState, Loading, PageHeader, Panel } from "@/components/admin/parts";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { imageFileToDataUrl } from "@/lib/image";
 import { cn, errorMessage, timeAgo } from "@/lib/utils";
-import type { Author, CommunityReport, CommunitySpace, PostComment, SpacePost } from "@/types";
+import type { AdminUser, Author, CommunityReport, CommunitySpace, PostComment, SpaceMember, SpacePost, SpaceUpdate } from "@/types";
 
 const spaceSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
@@ -21,12 +23,32 @@ const spaceSchema = z.object({
 
 type SpaceValues = z.infer<typeof spaceSchema>;
 
-function SpaceForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (space: CommunitySpace) => void }) {
+interface SpaceFormProps {
+  /** The space being edited; leave out to create a new one. */
+  space?: CommunitySpace;
+  onCancel: () => void;
+  onSaved: (space: CommunitySpace) => void;
+}
+
+function SpaceForm({ space, onCancel, onSaved }: SpaceFormProps) {
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<SpaceValues>({
     resolver: zodResolver(spaceSchema),
-    defaultValues: { name: "", description: "" },
+    defaultValues: { name: space?.name ?? "", description: space?.description ?? "" },
   });
-  const [image, setImage] = useState<string | null>(null);
+  const [image, setImage] = useState<string | null>(space?.imageUrl ?? null);
+  const [moderatorId, setModeratorId] = useState(space?.moderator?.id ?? "");
+  const [users, setUsers] = useState<AdminUser[] | null>(null);
+
+  // Moderator choices are only needed when editing.
+  useEffect(() => {
+    if (!space) return;
+    getUsers()
+      .then((list) => setUsers([...list].sort((a, b) => (a.alias || a.email || "").localeCompare(b.alias || b.email || ""))))
+      .catch((error) => {
+        setUsers([]);
+        toast.error(errorMessage(error, "Could not load users for the moderator list"));
+      });
+  }, [space]);
   const [imageError, setImageError] = useState("");
   const [isReadingImage, setIsReadingImage] = useState(false);
 
@@ -46,11 +68,32 @@ function SpaceForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (
   };
 
   const onSubmit = async ({ name, description }: SpaceValues) => {
+    if (!space) {
+      try {
+        onSaved(await createSpace({ name, description, imageUrl: image ?? undefined }));
+        toast.success("Space created");
+      } catch (error) {
+        toast.error(errorMessage(error, "Could not create the space"));
+      }
+      return;
+    }
+
+    const changes: SpaceUpdate = { name, description };
+    if (image && image !== space.imageUrl) changes.imageUrl = image;
+    if (moderatorId && moderatorId !== space.moderator?.id) changes.moderatorId = moderatorId;
     try {
-      onCreated(await createSpace({ name, description, imageUrl: image ?? undefined }));
-      toast.success("Space created");
+      const updated = await updateSpace(space.id, changes);
+      const chosen = users?.find((u) => u.id === moderatorId);
+      onSaved({
+        ...space,
+        ...changes,
+        ...updated,
+        moderator: chosen ? { id: chosen.id, alias: chosen.alias ?? "", email: chosen.email } : space.moderator,
+        _count: space._count,
+      });
+      toast.success("Space updated");
     } catch (error) {
-      toast.error(errorMessage(error, "Could not create the space"));
+      toast.error(errorMessage(error, "Could not update the space"));
     }
   };
 
@@ -89,11 +132,61 @@ function SpaceForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (
         )}
         {imageError && <p className="field-error" role="alert">{imageError}</p>}
       </div>
+      {space && (
+        <div>
+          <label htmlFor="moderatorId" className="label">Moderator</label>
+          <select
+            id="moderatorId"
+            className="select"
+            value={moderatorId}
+            disabled={!users}
+            onChange={(e) => setModeratorId(e.target.value)}
+          >
+            {/* The backend can change a moderator but not remove one, so "none" is only offered when there is none. */}
+            <option value="" disabled={!!space.moderator}>{users ? "No moderator" : "Loading users…"}</option>
+            {users?.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.alias || u.email || "Unnamed user"}{u.role !== "USER" ? ` (${u.role.toLowerCase()})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" isLoading={isSubmitting} disabled={isReadingImage}>Create space</Button>
+        <Button type="submit" isLoading={isSubmitting} disabled={isReadingImage}>{space ? "Save changes" : "Create space"}</Button>
       </div>
     </form>
+  );
+}
+
+/** Lists the users active in a space (GET /admin/community/spaces/{spaceId}/users). */
+function SpaceMembers({ spaceId }: { spaceId: string }) {
+  const [members, setMembers] = useState<SpaceMember[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getSpaceUsers(spaceId)
+      .then(setMembers)
+      .catch((e) => setError(errorMessage(e, "Could not load the members")));
+  }, [spaceId]);
+
+  if (error) return <p className="field-error" role="alert">{error}</p>;
+  if (!members) return <Loading label="Loading members…" />;
+  if (members.length === 0) return <EmptyState icon={TbUsersGroup} title="No active members" text="Nobody has posted or commented here yet." />;
+
+  return (
+    <ul className="m-0 max-h-[50vh] list-none divide-y divide-line overflow-y-auto p-0">
+      {members.map((m) => (
+        <li key={m.id} className="flex items-center justify-between gap-3 py-2.5">
+          <span className="min-w-0">
+            <span className="block truncate font-semibold">{m.alias || "Anonymous"}</span>
+            {m.email && <span className="block truncate text-[0.8rem] text-muted">{m.email}</span>}
+          </span>
+          {m.role && m.role !== "USER" && <span className="tag">{m.role.toLowerCase()}</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -239,6 +332,8 @@ export default function CommunityPage() {
   const [isHiding, setIsHiding] = useState(false);
   const [spaceToDelete, setSpaceToDelete] = useState<CommunitySpace | null>(null);
   const [isDeletingSpace, setIsDeletingSpace] = useState(false);
+  const [editingSpace, setEditingSpace] = useState<CommunitySpace | null>(null);
+  const [membersOf, setMembersOf] = useState<CommunitySpace | null>(null);
 
   useEffect(() => {
     Promise.all([getReports(), getSpaces()])
@@ -419,9 +514,17 @@ export default function CommunityPage() {
         <section className="card p-0">
           <div className="flex items-center justify-between gap-3 border-b border-line p-4">
             <h2 className="m-0 text-[1.05rem] font-bold">Posts in {selectedSpace.name}</h2>
-            <button type="button" className="btn btn-danger-outline btn-sm" onClick={() => setSpaceToDelete(selectedSpace)}>
-              <TbTrash size={15} /> Delete space
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMembersOf(selectedSpace)}>
+                <TbUsers size={15} /> Members
+              </button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingSpace(selectedSpace)}>
+                <TbPencil size={15} /> Edit
+              </button>
+              <button type="button" className="btn btn-danger-outline btn-sm" onClick={() => setSpaceToDelete(selectedSpace)}>
+                <TbTrash size={15} /> Delete space
+              </button>
+            </div>
           </div>
           <div className="border-b border-line p-4">
             <Composer
@@ -461,11 +564,32 @@ export default function CommunityPage() {
       <Dialog open={addingSpace} onClose={() => setAddingSpace(false)} title="Add space">
         <SpaceForm
           onCancel={() => setAddingSpace(false)}
-          onCreated={(space) => {
+          onSaved={(space) => {
             setSpaces((list) => [...list, space].sort((a, b) => a.name.localeCompare(b.name)));
             setAddingSpace(false);
           }}
         />
+      </Dialog>
+
+      <Dialog open={!!editingSpace} onClose={() => setEditingSpace(null)} title="Edit space">
+        {editingSpace && (
+          <SpaceForm
+            key={editingSpace.id}
+            space={editingSpace}
+            onCancel={() => setEditingSpace(null)}
+            onSaved={(space) => {
+              setSpaces((list) => list.map((s) => (s.id === space.id ? space : s)).sort((a, b) => a.name.localeCompare(b.name)));
+              setEditingSpace(null);
+            }}
+          />
+        )}
+      </Dialog>
+
+      <Dialog open={!!membersOf} onClose={() => setMembersOf(null)} title={`Members of ${membersOf?.name ?? ""}`}>
+        {membersOf && <SpaceMembers spaceId={membersOf.id} />}
+        <div className="mt-4 flex justify-end">
+          <Button type="button" variant="ghost" onClick={() => setMembersOf(null)}>Close</Button>
+        </div>
       </Dialog>
 
       <Dialog open={!!spaceToDelete} onClose={() => !isDeletingSpace && setSpaceToDelete(null)} title="Delete this space?">

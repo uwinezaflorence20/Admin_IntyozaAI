@@ -133,11 +133,13 @@ interface DialogProps {
   open: boolean;
   onClose?: () => void;
   title: string;
+  /** "sm" for confirmations, "lg" for longer forms. */
+  size?: "sm" | "lg";
   children: ReactNode;
 }
 
-/** Small modal used for confirmations (logout, delete, …). */
-export function Dialog({ open, onClose, title, children }: DialogProps) {
+/** Modal used for confirmations (logout, delete, …) and forms. */
+export function Dialog({ open, onClose, title, size = "sm", children }: DialogProps) {
   return (
     <AnimatePresence>
       {open && (
@@ -155,7 +157,10 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
             initial={{ scale: 0.95, y: 8 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.95, y: 8 }}
-            className="w-full max-w-sm rounded-[22px] border border-line bg-surface p-6 shadow-card"
+            className={cn(
+              "max-h-[92vh] w-full overflow-y-auto rounded-[22px] border border-line bg-surface p-6 shadow-card",
+              size === "lg" ? "max-w-xl" : "max-w-sm"
+            )}
           >
             <h2 className="mb-2 text-[1.2rem] font-bold">{title}</h2>
             {children}
