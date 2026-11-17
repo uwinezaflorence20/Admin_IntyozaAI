@@ -4,6 +4,10 @@
  *
  *   ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run seed            # dry run: shows what would be created
  *   ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run seed -- --apply # creates it
+ *   npm run seed -- --learning --apply                         # categories and articles only
+ *   npm run seed -- --community --apply                        # community spaces only
+ *
+ * Instead of environment variables, ADMIN_EMAIL and ADMIN_PASSWORD can go in .env.seed (git-ignored).
  *
  * API_URL defaults to the production backend. Anything that already exists (same category slug,
  * article title, myth text or space name) is skipped, so running it again is safe.
@@ -11,10 +15,23 @@
  * Not seeded: health facilities (real, verified data only — use the Import button in Services),
  * users, referrals and reports (these come from people using the app).
  */
+import { existsSync, readFileSync } from "node:fs";
 import { articles, categories, myths, spaces } from "./data.mjs";
+
+// Credentials can also live in .env.seed at the project root (git-ignored), as KEY=value lines.
+if (existsSync(".env.seed")) {
+  for (const line of readFileSync(".env.seed", "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/);
+    if (match && !process.env[match[1]]) process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
+  }
+}
 
 const API_URL = (process.env.API_URL || "https://intyoza-backend.onrender.com/api/v1").replace(/\/$/, "");
 const APPLY = process.argv.includes("--apply");
+// --learning and --community pick sections (categories + articles, spaces + welcome posts); none means all.
+const ONLY_LEARNING = process.argv.includes("--learning");
+const ONLY_COMMUNITY = process.argv.includes("--community");
+const ALL = !ONLY_LEARNING && !ONLY_COMMUNITY;
 const { ADMIN_EMAIL, ADMIN_PASSWORD } = process.env;
 
 let token = "";
@@ -77,6 +94,13 @@ async function main() {
     token = login.token;
   }
 
+  if (ALL || ONLY_LEARNING) await seedLearning();
+  if (ALL) await seedMyths();
+  if (ALL || ONLY_COMMUNITY) await seedCommunity();
+  summary();
+}
+
+async function seedLearning() {
   console.log("Learning categories");
   const existingCategories = list(await call("GET", "/learning/categories"), "categories");
   const categoryIds = Object.fromEntries(existingCategories.map((c) => [c.slug, c.id]));
@@ -100,13 +124,17 @@ async function main() {
       call("POST", "/admin/learning/articles", { ...article, categoryId })
     );
   }
+}
 
+async function seedMyths() {
   console.log("\nMyth checks");
   const existingMyths = new Set(list(await call("GET", "/myths"), "myths").map((m) => m.mythText));
   for (const myth of myths) {
     await step(myth.mythText, existingMyths.has(myth.mythText), () => call("POST", "/admin/myths", myth));
   }
+}
 
+async function seedCommunity() {
   console.log("\nCommunity spaces");
   let existingSpaces = new Set();
   if (token) {
@@ -126,7 +154,9 @@ async function main() {
       counts.created++;
     }
   }
+}
 
+function summary() {
   const verb = APPLY ? "Created" : "Would create";
   console.log(`\n${verb} ${counts.created}, skipped ${counts.skipped}${counts.failed ? `, failed ${counts.failed}` : ""}.`);
   if (!APPLY) console.log("Nothing was written. Run again with --apply to create it.");

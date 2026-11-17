@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useSearchParams } from "react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -325,8 +326,20 @@ export default function CommunityPage() {
   const [reports, setReports] = useState<CommunityReport[] | null>(null);
   const [spaces, setSpaces] = useState<CommunitySpace[]>([]);
   const [loadError, setLoadError] = useState("");
-  const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(() => searchParams.get("space"));
   const [posts, setPosts] = useState<SpacePost[] | null>(null);
+
+  // The header search links here with ?space=, also while this page is already open.
+  const linkedSpace = searchParams.get("space");
+  const [lastLinkedSpace, setLastLinkedSpace] = useState(linkedSpace);
+  if (linkedSpace !== lastLinkedSpace) {
+    setLastLinkedSpace(linkedSpace);
+    if (linkedSpace) {
+      setPosts(null);
+      setSelectedSpaceId(linkedSpace);
+    }
+  }
   const [addingSpace, setAddingSpace] = useState(false);
   const [postToHide, setPostToHide] = useState<{ id: string; content: string } | null>(null);
   const [isHiding, setIsHiding] = useState(false);
@@ -428,7 +441,8 @@ export default function CommunityPage() {
         description="Review what people report and hide posts that share personal details or harmful advice."
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+      {/* Spaces are the main area; reports sit in a narrower column beside them. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
         <section className="card p-0">
           <div className="border-b border-line p-4">
             <h2 className="m-0 text-[1.05rem] font-bold">Pending reports · {reports.length}</h2>
@@ -481,7 +495,7 @@ export default function CommunityPage() {
           {spaces.length === 0 ? (
             <EmptyState icon={TbUsersGroup} title="No spaces yet" text="Add the first community space." />
           ) : (
-            <ul className="m-0 list-none space-y-3 p-0">
+            <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2">
               {spaces.map((space) => (
                 <li key={space.id}>
                   <button
@@ -489,7 +503,7 @@ export default function CommunityPage() {
                     aria-pressed={space.id === selectedSpaceId}
                     onClick={() => selectSpace(space.id)}
                     className={cn(
-                      "w-full rounded-[14px] border border-line p-3 text-left transition hover:bg-surface-2",
+                      "h-full w-full rounded-[14px] border border-line p-3 text-left transition hover:bg-surface-2",
                       space.id === selectedSpaceId && "border-brand bg-brand-soft"
                     )}
                   >
