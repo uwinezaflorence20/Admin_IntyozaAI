@@ -263,6 +263,7 @@ export default function LearningPage() {
                   <th>English</th>
                   <th>Kinyarwanda</th>
                   <th>Slug</th>
+                  <th className="text-right">Articles</th>
                 </tr>
               </thead>
               <tbody>
@@ -271,6 +272,7 @@ export default function LearningPage() {
                     <td className="font-semibold">{c.nameEn}</td>
                     <td>{c.nameRw}</td>
                     <td className="text-muted">{c.slug}</td>
+                    <td className="text-right font-semibold">{articles.filter((a) => a.categoryId === c.id).length}</td>
                   </tr>
                 ))}
               </tbody>

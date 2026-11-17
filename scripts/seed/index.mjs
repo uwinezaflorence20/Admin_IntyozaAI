@@ -4,6 +4,9 @@
  *
  *   ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run seed            # dry run: shows what would be created
  *   ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run seed -- --apply # creates it
+ *   npm run seed -- --learning --apply                         # categories and articles only
+ *
+ * Instead of environment variables, ADMIN_EMAIL and ADMIN_PASSWORD can go in .env.seed (git-ignored).
  *
  * API_URL defaults to the production backend. Anything that already exists (same category slug,
  * article title, myth text or space name) is skipped, so running it again is safe.
@@ -11,10 +14,21 @@
  * Not seeded: health facilities (real, verified data only — use the Import button in Services),
  * users, referrals and reports (these come from people using the app).
  */
+import { existsSync, readFileSync } from "node:fs";
 import { articles, categories, myths, spaces } from "./data.mjs";
+
+// Credentials can also live in .env.seed at the project root (git-ignored), as KEY=value lines.
+if (existsSync(".env.seed")) {
+  for (const line of readFileSync(".env.seed", "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/);
+    if (match && !process.env[match[1]]) process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
+  }
+}
 
 const API_URL = (process.env.API_URL || "https://intyoza-backend.onrender.com/api/v1").replace(/\/$/, "");
 const APPLY = process.argv.includes("--apply");
+/** Only categories and articles. */
+const LEARNING_ONLY = process.argv.includes("--learning");
 const { ADMIN_EMAIL, ADMIN_PASSWORD } = process.env;
 
 let token = "";
@@ -101,6 +115,8 @@ async function main() {
     );
   }
 
+  if (LEARNING_ONLY) return summary();
+
   console.log("\nMyth checks");
   const existingMyths = new Set(list(await call("GET", "/myths"), "myths").map((m) => m.mythText));
   for (const myth of myths) {
@@ -127,6 +143,10 @@ async function main() {
     }
   }
 
+  summary();
+}
+
+function summary() {
   const verb = APPLY ? "Created" : "Would create";
   console.log(`\n${verb} ${counts.created}, skipped ${counts.skipped}${counts.failed ? `, failed ${counts.failed}` : ""}.`);
   if (!APPLY) console.log("Nothing was written. Run again with --apply to create it.");
