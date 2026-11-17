@@ -297,4 +297,14 @@ export const spaces = [
     description: "Support each other with stress, exams, feelings and mental health.",
     welcome: "Welcome to Mind Matters. This is a supportive space — if you are thinking about hurting yourself, please talk to someone you trust or visit a health facility today.",
   },
+  {
+    name: "Boys Talk",
+    description: "A space for boys and young men to ask about puberty, health, relationships and growing up.",
+    welcome: "Welcome to Boys Talk! Ask anything about your body, health or relationships. Respect each other and keep personal details private.",
+  },
+  {
+    name: "Safe Online",
+    description: "Share tips and ask questions about staying safe on social media, chats and dating apps.",
+    welcome: "Welcome! If someone online is threatening you or asking for photos, you are not alone and it is not your fault. Tell a trusted adult and report it.",
+  },
 ];

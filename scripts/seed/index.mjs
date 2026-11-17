@@ -5,6 +5,7 @@
  *   ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run seed            # dry run: shows what would be created
  *   ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run seed -- --apply # creates it
  *   npm run seed -- --learning --apply                         # categories and articles only
+ *   npm run seed -- --community --apply                        # community spaces only
  *
  * Instead of environment variables, ADMIN_EMAIL and ADMIN_PASSWORD can go in .env.seed (git-ignored).
  *
@@ -27,8 +28,10 @@ if (existsSync(".env.seed")) {
 
 const API_URL = (process.env.API_URL || "https://intyoza-backend.onrender.com/api/v1").replace(/\/$/, "");
 const APPLY = process.argv.includes("--apply");
-/** Only categories and articles. */
-const LEARNING_ONLY = process.argv.includes("--learning");
+// --learning and --community pick sections (categories + articles, spaces + welcome posts); none means all.
+const ONLY_LEARNING = process.argv.includes("--learning");
+const ONLY_COMMUNITY = process.argv.includes("--community");
+const ALL = !ONLY_LEARNING && !ONLY_COMMUNITY;
 const { ADMIN_EMAIL, ADMIN_PASSWORD } = process.env;
 
 let token = "";
@@ -91,6 +94,13 @@ async function main() {
     token = login.token;
   }
 
+  if (ALL || ONLY_LEARNING) await seedLearning();
+  if (ALL) await seedMyths();
+  if (ALL || ONLY_COMMUNITY) await seedCommunity();
+  summary();
+}
+
+async function seedLearning() {
   console.log("Learning categories");
   const existingCategories = list(await call("GET", "/learning/categories"), "categories");
   const categoryIds = Object.fromEntries(existingCategories.map((c) => [c.slug, c.id]));
@@ -114,15 +124,17 @@ async function main() {
       call("POST", "/admin/learning/articles", { ...article, categoryId })
     );
   }
+}
 
-  if (LEARNING_ONLY) return summary();
-
+async function seedMyths() {
   console.log("\nMyth checks");
   const existingMyths = new Set(list(await call("GET", "/myths"), "myths").map((m) => m.mythText));
   for (const myth of myths) {
     await step(myth.mythText, existingMyths.has(myth.mythText), () => call("POST", "/admin/myths", myth));
   }
+}
 
+async function seedCommunity() {
   console.log("\nCommunity spaces");
   let existingSpaces = new Set();
   if (token) {
@@ -142,8 +154,6 @@ async function main() {
       counts.created++;
     }
   }
-
-  summary();
 }
 
 function summary() {
