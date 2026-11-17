@@ -10,6 +10,8 @@ import { getSession, logout } from '@/lib/api';
 import { Brand } from '@/components/Brand';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Dialog } from '@/components/admin/parts';
+import { HeaderSearch } from '@/components/admin/HeaderSearch';
+import { Notifications } from '@/components/admin/Notifications';
 import type { User } from '@/types';
 
 const MENU = [
@@ -27,7 +29,8 @@ const initialsOf = (name = '') =>
 
 function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
   return (
-    <nav aria-label="Admin" className="flex flex-col gap-1">
+    // Links run to the panel's right edge so the hover/current tab can flow into the page (see .side-link).
+    <nav aria-label="Admin" className="flex flex-col gap-2 pl-4">
       {MENU.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
@@ -36,12 +39,9 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
             to={item.href}
             onClick={onNavigate}
             aria-current={active ? 'page' : undefined}
-            className={cn(
-              'flex items-center gap-3 rounded-full px-4 py-2.5 text-[0.95rem] no-underline transition',
-              active ? 'bg-brand-soft font-semibold text-brand' : 'font-medium text-fg hover:bg-surface-2'
-            )}
+            className="side-link group"
           >
-            <item.icon size={20} className={active ? 'text-brand' : 'text-muted'} />
+            <item.icon size={20} className={active ? 'text-accent' : 'group-hover:text-brand'} />
             {item.name}
           </Link>
         );
@@ -52,12 +52,32 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
 
 function PrivacyNote() {
   return (
-    <div className="rounded-[14px] bg-teal-soft p-3.5 text-[0.82rem] text-fg">
-      <strong className="mb-1 flex items-center gap-1.5 text-teal-text">
+    // Hidden on short screens so the menu fits without scrolling.
+    <div className="mx-4 rounded-[14px] bg-white/10 p-3.5 text-[0.8rem] text-white/80 [@media(max-height:760px)]:hidden">
+      <strong className="mb-1 flex items-center gap-1.5 text-white">
         <TbShieldLock size={16} /> Privacy first
       </strong>
       Admins see aliases and totals, never chat messages. Handle every report with care.
     </div>
+  );
+}
+
+/** The purple sidebar body, shared by the desktop panel and the mobile drawer. */
+function SidebarBody({ pathname, onNavigate, onLogout }: { pathname: string; onNavigate?: () => void; onLogout: () => void }) {
+  return (
+    <>
+      <div className="flex-1 py-6">
+        <NavLinks pathname={pathname} onNavigate={onNavigate} />
+      </div>
+      <div className="space-y-3 pt-3 pb-6">
+        <PrivacyNote />
+        <div className="pl-4">
+          <button type="button" onClick={onLogout} className="side-link group w-full cursor-pointer">
+            <TbLogout size={20} className="group-hover:text-danger" /> Log out
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -108,29 +128,17 @@ export default function AdminLayout() {
       </a>
 
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface lg:flex">
-        <div className="flex h-[72px] items-center px-5">
-          <Link to="/admin/dashboard" aria-label="Intyoza admin home">
-            <Brand className="h-10 w-auto" />
-          </Link>
-        </div>
-        <div className="px-5 pb-2">
-          <span className="tag tag-brand">Admin console</span>
-        </div>
-        <div className="flex-1 overflow-y-auto px-3 py-3">
-          <NavLinks pathname={pathname} />
-        </div>
-        <div className="space-y-3 border-t border-line p-4">
-          <PrivacyNote />
-          <button
-            type="button"
-            onClick={() => setShowLogoutModal(true)}
-            className="flex w-full items-center gap-3 rounded-full px-4 py-2.5 font-medium text-danger transition hover:bg-danger-soft"
-          >
-            <TbLogout size={20} /> Log out
-          </button>
-        </div>
-      </aside>
+      <div className="sticky top-0 hidden h-screen w-64 shrink-0 lg:block">
+        <aside className="flex h-full flex-col rounded-r-[28px] bg-auth-panel text-white">
+          <div className="flex flex-col items-center gap-2 px-5 pt-7 pb-4">
+            <Link to="/admin/dashboard" aria-label="Intyoza admin home" className="rounded-[14px] bg-white px-3 py-2">
+              <img src="/logo.png" width={305} height={127} alt="Intyoza" className="h-8 w-auto" />
+            </Link>
+            <span className="text-[0.72rem] font-semibold tracking-[0.08em] text-white/70 uppercase">Admin console</span>
+          </div>
+          <SidebarBody pathname={pathname} onLogout={() => setShowLogoutModal(true)} />
+        </aside>
+      </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b border-line bg-bg/90 backdrop-blur-md">
@@ -146,12 +154,17 @@ export default function AdminLayout() {
             <div className="lg:hidden">
               <Brand className="h-8 w-auto" />
             </div>
-            <p className="m-0 hidden text-[0.9rem] text-muted lg:block">
+            <p className="m-0 hidden shrink-0 text-[0.9rem] text-muted xl:block">
               Intyoza admin <span aria-hidden="true">/</span>{' '}
               <span className="font-semibold text-fg">{current?.name || 'Overview'}</span>
             </p>
 
+            <div className="hidden min-w-0 flex-1 justify-center md:flex">
+              <HeaderSearch />
+            </div>
+
             <div className="ml-auto flex items-center gap-2.5">
+              <Notifications />
               <ThemeToggle />
               <div className="relative" ref={dropdownRef}>
                 <button
@@ -232,27 +245,26 @@ export default function AdminLayout() {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'tween', duration: 0.2 }}
-              className="fixed inset-y-0 left-0 z-[101] flex w-72 flex-col bg-surface shadow-card lg:hidden"
+              className="fixed inset-y-0 left-0 z-[101] flex w-72 flex-col rounded-r-[28px] bg-auth-panel text-white shadow-card lg:hidden"
             >
               <div className="flex h-[72px] items-center justify-between px-5">
-                <Brand className="h-9 w-auto" />
-                <button type="button" className="icon-btn" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
+                <span className="rounded-[12px] bg-white px-2.5 py-1.5">
+                  <img src="/logo.png" width={305} height={127} alt="Intyoza" className="h-7 w-auto" />
+                </span>
+                <button
+                  type="button"
+                  className="grid size-[38px] place-items-center rounded-full text-white hover:bg-white/10"
+                  onClick={() => setSidebarOpen(false)}
+                  aria-label="Close menu"
+                >
                   <TbX size={20} />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto px-3 py-3">
-                <NavLinks pathname={pathname} onNavigate={() => setSidebarOpen(false)} />
-              </div>
-              <div className="space-y-3 border-t border-line p-4">
-                <PrivacyNote />
-                <button
-                  type="button"
-                  onClick={() => setShowLogoutModal(true)}
-                  className="flex w-full items-center gap-3 rounded-full px-4 py-2.5 font-medium text-danger hover:bg-danger-soft"
-                >
-                  <TbLogout size={20} /> Log out
-                </button>
-              </div>
+              <SidebarBody
+                pathname={pathname}
+                onNavigate={() => setSidebarOpen(false)}
+                onLogout={() => setShowLogoutModal(true)}
+              />
             </motion.aside>
           </>
         )}

@@ -313,4 +313,47 @@
   .table tbody tr {
     @apply hover:bg-surface-2/60;
   }
+
+  /*
+   * Sidebar links: on hover and on the current page the link becomes a tab in the page colour that
+   * runs into the content, with curved notches above and below it. The notches are transparent
+   * squares whose rounded corner is cut out by a box-shadow in the page colour.
+   */
+  .side-link {
+    @apply relative flex items-center gap-3 rounded-l-full py-3 pr-4 pl-5 text-[0.95rem] font-medium text-white/80 no-underline transition-colors duration-150;
+  }
+  .side-link::before,
+  .side-link::after {
+    content: "";
+    @apply pointer-events-none absolute right-0 size-5 opacity-0 transition-opacity duration-150;
+  }
+  .side-link::before {
+    top: -1.25rem;
+    border-bottom-right-radius: 1.25rem;
+    box-shadow: 0.5rem 0.5rem 0 0.5rem var(--bg);
+  }
+  .side-link::after {
+    bottom: -1.25rem;
+    border-top-right-radius: 1.25rem;
+    box-shadow: 0.5rem -0.5rem 0 0.5rem var(--bg);
+  }
+  .side-link:hover,
+  .side-link:focus-visible,
+  .side-link[aria-current="page"] {
+    @apply bg-bg text-fg;
+  }
+  .side-link:hover::before,
+  .side-link:hover::after,
+  .side-link:focus-visible::before,
+  .side-link:focus-visible::after,
+  .side-link[aria-current="page"]::before,
+  .side-link[aria-current="page"]::after {
+    @apply opacity-100;
+  }
+  .side-link[aria-current="page"] {
+    @apply font-semibold;
+  }
+  .side-link:focus-visible {
+    @apply outline-none;
+  }
 }

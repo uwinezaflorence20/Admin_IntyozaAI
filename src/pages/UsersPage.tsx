@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { TbSearch, TbUsers, TbUserShield, TbSpy } from "react-icons/tb";
 import { getUsers } from "@/lib/api";
 import { AGE_BAND_LABELS } from "@/lib/labels";
@@ -23,9 +24,19 @@ const initials = (alias: string | null) => (alias ? alias.split(" ").map((w) => 
 export default function UsersPage() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [loadError, setLoadError] = useState("");
-  const [query, setQuery] = useState("");
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(1);
+
+  // The header search links here with ?q=, also while this page is already open.
+  const linkedQuery = searchParams.get("q");
+  const [lastLinkedQuery, setLastLinkedQuery] = useState(linkedQuery);
+  if (linkedQuery !== lastLinkedQuery) {
+    setLastLinkedQuery(linkedQuery);
+    setQuery(linkedQuery ?? "");
+    setPage(1);
+  }
 
   useEffect(() => {
     getUsers()
