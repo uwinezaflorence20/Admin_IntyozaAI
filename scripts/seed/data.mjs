@@ -12,6 +12,7 @@ export const categories = [
   { slug: "gbv-safety", nameEn: "Gender-based violence & safety", nameRw: "Ihohoterwa rishingiye ku gitsina" },
   { slug: "hygiene-self-care", nameEn: "Hygiene & self-care", nameRw: "Isuku y'umubiri" },
   { slug: "alcohol-drugs", nameEn: "Alcohol & drugs", nameRw: "Inzoga n'ibiyobyabwenge" },
+  { slug: "safe-abortion-care", nameEn: "Abortion & post-abortion care", nameRw: "Gukuramo inda" },
 ];
 
 /** Shared defaults: short English articles that load on slow connections. */
@@ -144,6 +145,19 @@ export const articles = [
     "Peer pressure is when friends push you to do something you don't want to do, like drinking, smoking or taking drugs.",
     "Ways to say no: be clear and calm (\"No thanks\"), give a reason if you want to, suggest something else to do, or walk away. Real friends will respect your choice.",
     "Spending time with people who share your values makes it easier to stay true to yourself.",
+  ]),
+
+  // Abortion & post-abortion care (Rwanda). Check against the source shared on Slack before relying on it.
+  article("safe-abortion-care", "Abortion and the law in Rwanda", [
+    "In Rwanda, abortion is legal in specific situations set out in the penal code (Law No. 68/2018). A doctor may end a pregnancy when:",
+    "• the pregnant person is a child;\n• the pregnancy is the result of rape;\n• the pregnancy is the result of forced marriage;\n• the pregnancy is the result of incest with a close relative (up to the second degree);\n• continuing the pregnancy seriously endangers the health of the pregnant woman or of the baby.",
+    "No court decision is needed. The abortion must be done by a doctor in a health facility, following rules set by the Ministry of Health. Outside these situations, abortion is a crime in Rwanda.",
+    "If one of these situations applies to you, go to a health centre or district hospital as early as you can. If you were raped, an Isange One Stop Centre can also help with medical care, counselling and reporting.",
+  ]),
+  article("safe-abortion-care", "Unsafe abortion and post-abortion care", [
+    "Abortions done by untrained people, or with herbs, pills from unknown sources or objects, can cause heavy bleeding, infection, infertility and death.",
+    "Go to a health facility straight away if, after an abortion or a miscarriage, you have heavy bleeding (soaking more than two pads an hour for two hours), fever, strong pain in the belly, or bad-smelling discharge from the vagina.",
+    "Health facilities provide post-abortion care, including after a miscarriage. Getting care quickly can save your life. Health workers can also talk with you about contraception to prevent another unplanned pregnancy.",
   ]),
 ];
 
