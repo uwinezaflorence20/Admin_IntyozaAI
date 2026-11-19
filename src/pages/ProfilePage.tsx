@@ -130,7 +130,7 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Account" title="Profile" description="Your admin details and sign-in password." notConnected />
+      <PageHeader eyebrow="Account" title="Profile"description="Your admin details and sign-in password." />
 
       <section className="relative overflow-hidden rounded-[22px] bg-lavender p-6">
         <span className="absolute -top-8 -right-8 size-32 rounded-full bg-accent-soft" aria-hidden="true" />

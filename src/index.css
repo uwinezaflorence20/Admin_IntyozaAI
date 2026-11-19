@@ -49,7 +49,7 @@
   --shadow-sm: 0 1px 2px rgba(40, 30, 20, 0.06);
   --shadow: 0 6px 20px -8px rgba(40, 30, 60, 0.18);
 
-  --display: "Iosevka Charon", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --display: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
   --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
 
   color-scheme: light;
@@ -320,7 +320,7 @@
    * squares whose rounded corner is cut out by a box-shadow in the page colour.
    */
   .side-link {
-    @apply relative flex items-center gap-3 rounded-l-full py-3 pr-4 pl-5 text-[0.95rem] font-medium text-white/80 no-underline transition-colors duration-150;
+    @apply relative flex items-center gap-3 rounded-l-full py-2.5 pr-4 pl-5 text-[0.95rem] font-medium text-white/80 no-underline transition-colors duration-150;
   }
   .side-link::before,
   .side-link::after {
