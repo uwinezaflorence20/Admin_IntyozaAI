@@ -1,6 +1,7 @@
 import type {
   AdminUser,
   Article,
+  ArticleDetail,
   Category,
   CommunityReport,
   CommunitySpace,
@@ -141,13 +142,12 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
 /* ---------- Admin data ---------- */
 
-/** Read-only list of every registered user. The backend has no update/delete user route yet. */
+/** Every registered user. */
 export async function getUsers(): Promise<AdminUser[]> {
   return (await read<{ users: AdminUser[] }>("/admin/users")).users;
 }
 
-// These screens have their design but no backend endpoint yet, so they show empty states and make
-// no request. Replace each one with read() when its endpoint exists.
+// Overview and moderation queue start empty and make no request.
 export const getOverview = async (): Promise<Overview> => ({
   totals: {},
   signups: [],
@@ -160,8 +160,15 @@ export const getModerationQueue = async (): Promise<Post[]> => [];
 
 /* ---------- Learning content ---------- */
 
-export async function getArticles(): Promise<Article[]> {
-  return (await read<{ articles: Article[] }>("/learning/articles")).articles;
+/** Published articles, optionally only one category's. The list has no article content. */
+export async function getArticles(categoryId?: string): Promise<Article[]> {
+  const query = categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : "";
+  return (await read<{ articles: Article[] }>(`/learning/articles${query}`)).articles;
+}
+
+/** One article with its content and category. */
+export async function getArticle(id: string): Promise<ArticleDetail> {
+  return (await read<{ article: ArticleDetail }>(`/learning/articles/${id}`)).article;
 }
 
 export async function createArticle(article: NewArticle): Promise<Article> {
@@ -221,7 +228,7 @@ function facilityBody(facility: NewFacility, isUpdate = false) {
   return { ...scalars, services: isUpdate ? { deleteMany: {}, create } : { create } };
 }
 
-/** The backend has no admin list route for categories, so this reads the public one. */
+/** Learning categories. */
 export async function getCategories(): Promise<Category[]> {
   return (await read<{ categories: Category[] }>("/learning/categories")).categories;
 }
@@ -244,7 +251,7 @@ export const hidePost = (postId: string) => apiCall(`/admin/community/posts/${po
 export const resolveReport = (reportId: string, status: "RESOLVED" | "DISMISSED") =>
   apiCall(`/admin/community/reports/${reportId}`, { method: "PATCH", body: { status } });
 
-/** Delete a post or comment entirely (for severe violations) — cannot be undone. */
+/** Delete a post or comment entirely (for severe violations). This cannot be undone. */
 export const deletePost = (postId: string) => apiCall(`/admin/community/posts/${postId}`, { method: "DELETE" });
 export const deleteComment = (commentId: string) => apiCall(`/admin/community/comments/${commentId}`, { method: "DELETE" });
 export const deleteSpace = (spaceId: string) => apiCall(`/admin/community/spaces/${spaceId}`, { method: "DELETE" });
@@ -287,7 +294,7 @@ export async function createPost(spaceId: string, content: string): Promise<Spac
   return { ...post, user: sessionAuthor(), _count: { comments: 0, reports: 0 } };
 }
 
-/** Not in the swagger docs yet, but served by the backend. Hidden comments are left out. */
+/** Visible comments on a post. */
 export async function getComments(postId: string): Promise<PostComment[]> {
   return (await read<{ comments: PostComment[] }>(`/community/posts/${postId}/comments`)).comments;
 }

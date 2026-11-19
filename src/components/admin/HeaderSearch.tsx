@@ -19,8 +19,9 @@ interface Result {
 const PAGES: Result[] = [
   { id: "p-dashboard", group: "Pages", icon: TbLayoutDashboard, label: "Dashboard", href: "/admin/dashboard" },
   { id: "p-users", group: "Pages", icon: TbUsers, label: "Users", href: "/admin/users" },
-  { id: "p-community", group: "Pages", icon: TbMessages, label: "Community", hint: "Reports and spaces", href: "/admin/community" },
-  { id: "p-learning", group: "Pages", icon: TbBook, label: "Learning", hint: "Articles, categories, myths", href: "/admin/learning" },
+  { id: "p-community", group: "Pages", icon: TbMessages, label: "Safe Space", hint: "Reports and spaces", href: "/admin/safe-space" },
+  { id: "p-learning", group: "Pages", icon: TbBook, label: "Learning", hint: "Categories and articles", href: "/admin/learning" },
+  { id: "p-myths", group: "Pages", icon: TbHelpCircle, label: "Myths", hint: "Myth Buster", href: "/admin/myths" },
   { id: "p-services", group: "Pages", icon: TbBuildingHospital, label: "Services", hint: "Health facilities", href: "/admin/services" },
   { id: "p-referrals", group: "Pages", icon: TbPhoneCall, label: "Referrals", href: "/admin/referrals" },
   { id: "p-profile", group: "Pages", icon: TbUser, label: "Profile", href: "/admin/profile" },
@@ -41,16 +42,16 @@ async function loadIndex(): Promise<Result[]> {
       hint: [u.email, u.district].filter(Boolean).join(" · "), href: `/admin/users?q=${encodeURIComponent(u.alias || u.email || "")}`,
     })),
     ...spaces.map((s) => ({
-      id: `s-${s.id}`, group: "Community spaces", icon: TbMessages, label: s.name, hint: s.description, href: `/admin/community?space=${s.id}`,
+      id: `s-${s.id}`, group: "Safe Space groups", icon: TbMessages, label: s.name, hint: s.description, href: `/admin/safe-space/${s.id}`,
     })),
     ...articles.map((a) => ({
-      id: `a-${a.id}`, group: "Articles", icon: TbBook, label: a.title, hint: categoryName.get(a.categoryId), href: "/admin/learning",
+      id: `a-${a.id}`, group: "Articles", icon: TbBook, label: a.title, hint: categoryName.get(a.categoryId), href: `/admin/learning/${a.categoryId}/${a.id}`,
     })),
     ...categories.map((c) => ({
-      id: `c-${c.id}`, group: "Categories", icon: TbCategory, label: c.nameEn, hint: c.nameRw, href: "/admin/learning",
+      id: `c-${c.id}`, group: "Categories", icon: TbCategory, label: c.nameEn, hint: c.nameRw, href: `/admin/learning/${c.id}`,
     })),
     ...myths.map((m) => ({
-      id: `m-${m.id}`, group: "Myths", icon: TbHelpCircle, label: m.mythText, hint: m.factText, href: "/admin/learning",
+      id: `m-${m.id}`, group: "Myths", icon: TbHelpCircle, label: m.mythText, hint: m.factText, href: "/admin/myths",
     })),
     ...facilities.map((f) => ({
       id: `f-${f.id}`, group: "Facilities", icon: TbBuildingHospital, label: f.name,

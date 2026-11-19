@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { TbBell, TbFlag, TbLoader2, TbPhoneCall } from "react-icons/tb";
+import { TbBell, TbFlag, TbLoader2, TbPhoneCall, TbTrash } from "react-icons/tb";
 import { getReferrals, getReports } from "@/lib/api";
 import { cn, errorMessage, timeAgo } from "@/lib/utils";
 
@@ -16,7 +16,26 @@ interface Notice {
 }
 
 const SEEN_KEY = "intyoza.admin.notificationsSeenAt";
+const DELETED_KEY = "intyoza.admin.notificationsDeleted";
 const REFRESH_MS = 60_000;
+
+// Notifications this admin deleted. Deleting only hides the notification in this browser;
+// the report or referral it points to is not changed.
+const readDeleted = (): Set<string> => {
+  try {
+    const ids = JSON.parse(localStorage.getItem(DELETED_KEY) || "[]");
+    return new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+};
+const writeDeleted = (ids: Set<string>) => {
+  try {
+    localStorage.setItem(DELETED_KEY, JSON.stringify([...ids]));
+  } catch {
+    /* Private mode or blocked storage: deleted notifications come back after a reload. */
+  }
+};
 
 // The last time this admin opened the list; only a per-browser convenience, so failures are ignored.
 const readSeenAt = () => {
@@ -42,7 +61,7 @@ async function loadNotices(): Promise<Notice[]> {
     title: `${r.post ? "Post" : "Comment"} reported · ${r.reason}`,
     detail: (r.post?.content ?? r.comment?.content ?? "").slice(0, 90),
     createdAt: r.createdAt,
-    href: "/admin/community",
+    href: "/admin/safe-space",
   }));
   const fromReferrals: Notice[] = referrals
     .filter((r) => r.status === "PENDING")
@@ -63,6 +82,7 @@ export function Notifications() {
   const [notices, setNotices] = useState<Notice[] | null>(null);
   const [error, setError] = useState("");
   const [seenAt, setSeenAt] = useState(readSeenAt);
+  const [deleted, setDeleted] = useState(readDeleted);
   const ref = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(() => {
@@ -70,6 +90,13 @@ export function Notifications() {
       .then((list) => {
         setNotices(list);
         setError("");
+        // Forget deleted notifications whose report or referral is no longer waiting, so the saved list stays small.
+        setDeleted((current) => {
+          const ids = new Set(list.map((n) => n.id));
+          const kept = new Set([...current].filter((id) => ids.has(id)));
+          if (kept.size !== current.size) writeDeleted(kept);
+          return kept;
+        });
       })
       .catch((e) => setError(errorMessage(e, "Could not load notifications")));
   }, []);
@@ -96,7 +123,16 @@ export function Notifications() {
 
   // What counted as new when the list was opened, so those items stay highlighted while it is open.
   const [highlightFrom, setHighlightFrom] = useState(seenAt);
-  const unseen = notices?.filter((n) => new Date(n.createdAt).getTime() > seenAt).length ?? 0;
+  const visible = notices?.filter((n) => !deleted.has(n.id)) ?? null;
+  const unseen = visible?.filter((n) => new Date(n.createdAt).getTime() > seenAt).length ?? 0;
+
+  const remove = (ids: string[]) => {
+    setDeleted((current) => {
+      const next = new Set([...current, ...ids]);
+      writeDeleted(next);
+      return next;
+    });
+  };
 
   const toggle = () => {
     const next = !open;
@@ -140,30 +176,41 @@ export function Notifications() {
             className="absolute top-full right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-[14px] border border-line bg-surface shadow-card"
           >
             <div className="flex items-center justify-between border-b border-line px-4 py-3">
-              <p className="m-0 font-semibold">Notifications</p>
-              {notices && <span className="text-[0.8rem] text-muted">{notices.length} waiting</span>}
+              <p className="m-0 font-semibold">
+                Notifications
+                {visible && visible.length > 0 && <span className="ml-1.5 text-[0.8rem] font-normal text-muted">{visible.length}</span>}
+              </p>
+              {visible && visible.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm -mr-2 text-danger"
+                  onClick={() => remove(visible.map((n) => n.id))}
+                >
+                  <TbTrash size={15} /> Clear all
+                </button>
+              )}
             </div>
 
             <div className="max-h-[60vh] overflow-y-auto">
               {error ? (
                 <p className="m-0 px-4 py-6 text-center text-[0.88rem] text-danger">{error}</p>
-              ) : !notices ? (
+              ) : !visible ? (
                 <p className="m-0 flex items-center justify-center gap-2 px-4 py-6 text-[0.88rem] text-muted">
                   <TbLoader2 className="animate-spin text-brand" size={18} /> Loading…
                 </p>
-              ) : notices.length === 0 ? (
-                <p className="m-0 px-4 py-8 text-center text-[0.88rem] text-muted">Nothing is waiting for you. All caught up!</p>
+              ) : visible.length === 0 ? (
+                <p className="m-0 px-4 py-8 text-center text-[0.88rem] text-muted">No notifications. All caught up!</p>
               ) : (
                 <ul className="m-0 list-none divide-y divide-line p-0">
-                  {notices.map((n) => {
+                  {visible.map((n) => {
                     const isNew = new Date(n.createdAt).getTime() > highlightFrom;
                     const Icon = n.kind === "report" ? TbFlag : TbPhoneCall;
                     return (
-                      <li key={n.id}>
+                      <li key={n.id} className="group relative">
                         <Link
                           to={n.href}
                           onClick={() => setOpen(false)}
-                          className={cn("flex gap-3 px-4 py-3 text-fg no-underline hover:bg-surface-2", isNew && "bg-brand-soft/50")}
+                          className={cn("flex gap-3 py-3 pr-11 pl-4 text-fg no-underline hover:bg-surface-2", isNew && "bg-brand-soft/50")}
                         >
                           <span
                             className={cn(
@@ -182,6 +229,15 @@ export function Notifications() {
                             <span className="block text-[0.75rem] text-muted">{timeAgo(n.createdAt)}</span>
                           </span>
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() => remove([n.id])}
+                          aria-label={`Delete notification: ${n.title}`}
+                          title="Delete notification"
+                          className="absolute top-2.5 right-2 grid size-8 place-items-center rounded-full text-muted transition hover:bg-danger-soft hover:text-danger focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                        >
+                          <TbTrash size={16} />
+                        </button>
                       </li>
                     );
                   })}

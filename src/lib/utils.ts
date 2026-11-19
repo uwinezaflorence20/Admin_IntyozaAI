@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 /** "5 min ago", "3 h ago", "2 days ago", then a short date. */
 export function timeAgo(dateString?: string | null) {
-  if (!dateString) return '—';
+  if (!dateString) return 'Unknown';
   const minutes = Math.round((Date.now() - new Date(dateString).getTime()) / 60000);
   if (minutes < 1) return 'just now';
   if (minutes < 60) return `${minutes} min ago`;

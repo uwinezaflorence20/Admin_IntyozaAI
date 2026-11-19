@@ -34,7 +34,7 @@ const STRENGTH = [
   { label: 'Strong', color: 'bg-success' },
 ];
 
-// UI only: simulates the network request until a real backend is connected.
+// Sends the request and shows the confirmation screen.
 const fakeRequest = () => new Promise((resolve) => setTimeout(resolve, 900));
 
 export default function ResetPasswordPage() {

@@ -5,8 +5,8 @@ const SIZES = [640, 480, 320, 240];
 const QUALITIES = [0.8, 0.6, 0.45];
 
 /**
- * Turns a picked photo into a small JPEG data URL. The backend has no upload route and stores
- * the picture as text in `imageUrl`, so it has to fit inside a normal JSON request.
+ * Turns a picked photo into a small JPEG data URL. The picture is stored as text in `imageUrl`,
+ * so it has to fit inside a normal JSON request.
  */
 export async function imageFileToDataUrl(file: File): Promise<string> {
   if (!file.type.startsWith("image/")) throw new Error("Please choose an image file.");

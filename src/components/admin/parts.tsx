@@ -1,32 +1,23 @@
 import type { ReactNode } from "react";
 import type { IconType } from "react-icons";
 import { AnimatePresence, motion } from "framer-motion";
-import { TbLoader2, TbPlugConnectedX } from "react-icons/tb";
+import { TbLoader2 } from "react-icons/tb";
 import { cn } from "@/lib/utils";
 
 interface PageHeaderProps {
   eyebrow?: string;
   title: ReactNode;
   description?: ReactNode;
-  /** Marks a page that has its design but is not connected to the backend yet. */
-  notConnected?: boolean;
   children?: ReactNode;
 }
 
 /** Title block at the top of every admin page. */
-export function PageHeader({ eyebrow, title, description, notConnected, children }: PageHeaderProps) {
+export function PageHeader({ eyebrow, title, description, children }: PageHeaderProps) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
         {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-        <h1 className="m-0 flex flex-wrap items-center gap-3 font-display text-[clamp(1.5rem,2.6vw,2rem)] leading-tight font-bold">
-          {title}
-          {notConnected && (
-            <span className="tag tag-sun font-sans text-[0.72rem] tracking-normal" title="The backend has no endpoint for this yet.">
-              <TbPlugConnectedX size={13} /> Not connected yet
-            </span>
-          )}
-        </h1>
+        <h1 className="m-0 font-display text-[clamp(1.5rem,2.6vw,2rem)] leading-tight font-bold">{title}</h1>
         {description && <p className="mt-1.5 mb-0 max-w-[62ch] text-muted">{description}</p>}
       </div>
       {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
