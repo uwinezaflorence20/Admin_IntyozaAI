@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import {
-  TbLayoutDashboard, TbUsers, TbMessages, TbBook, TbMapPin, TbPhoneCall,
+  TbLayoutDashboard, TbUsers, TbMessages, TbBook, TbHelpCircle, TbMapPin, TbPhoneCall,
   TbLogout, TbMenu2, TbX, TbUser, TbChevronDown, TbShieldLock, TbLoader2,
 } from 'react-icons/tb';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,8 +17,9 @@ import type { User } from '@/types';
 const MENU = [
   { name: 'Dashboard', href: '/admin/dashboard', icon: TbLayoutDashboard },
   { name: 'Users', href: '/admin/users', icon: TbUsers },
-  { name: 'Community', href: '/admin/community', icon: TbMessages },
+  { name: 'Safe Space', href: '/admin/safe-space', icon: TbMessages },
   { name: 'Learning', href: '/admin/learning', icon: TbBook },
+  { name: 'Myths', href: '/admin/myths', icon: TbHelpCircle },
   { name: 'Services', href: '/admin/services', icon: TbMapPin },
   { name: 'Referrals', href: '/admin/referrals', icon: TbPhoneCall },
   { name: 'Profile', href: '/admin/profile', icon: TbUser },
@@ -30,7 +31,7 @@ const initialsOf = (name = '') =>
 function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
   return (
     // Links run to the panel's right edge so the hover/current tab can flow into the page (see .side-link).
-    <nav aria-label="Admin" className="flex flex-col gap-2 pl-4">
+    <nav aria-label="Admin" className="flex flex-col gap-1.5 pl-4">
       {MENU.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
@@ -52,8 +53,8 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
 
 function PrivacyNote() {
   return (
-    // Hidden on short screens so the menu fits without scrolling.
-    <div className="mx-4 rounded-[14px] bg-white/10 p-3.5 text-[0.8rem] text-white/80 [@media(max-height:760px)]:hidden">
+    // Hidden on shorter screens so the menu always fits without scrolling.
+    <div className="mx-4 rounded-[14px] bg-white/10 p-3.5 text-[0.8rem] text-white/80 [@media(max-height:900px)]:hidden">
       <strong className="mb-1 flex items-center gap-1.5 text-white">
         <TbShieldLock size={16} /> Privacy first
       </strong>
@@ -66,10 +67,11 @@ function PrivacyNote() {
 function SidebarBody({ pathname, onNavigate, onLogout }: { pathname: string; onNavigate?: () => void; onLogout: () => void }) {
   return (
     <>
-      <div className="flex-1 py-6">
+      {/* At least 20px above and below the links, for the tab's curved notches. */}
+      <div className="flex-1 py-5">
         <NavLinks pathname={pathname} onNavigate={onNavigate} />
       </div>
-      <div className="space-y-3 pt-3 pb-6">
+      <div className="space-y-3 pb-5">
         <PrivacyNote />
         <div className="pl-4">
           <button type="button" onClick={onLogout} className="side-link group w-full cursor-pointer">
@@ -128,9 +130,10 @@ export default function AdminLayout() {
       </a>
 
       {/* Desktop sidebar */}
-      <div className="sticky top-0 hidden h-screen w-64 shrink-0 lg:block">
-        <aside className="flex h-full flex-col rounded-r-[28px] bg-auth-panel text-white">
-          <div className="flex flex-col items-center gap-2 px-5 pt-7 pb-4">
+      {/* Keeps the sidebar's width in the layout; the sidebar itself is pinned to the window so it always fills its full height. */}
+      <div className="hidden w-64 shrink-0 lg:block">
+        <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col rounded-r-[28px] bg-auth-panel text-white">
+          <div className="flex flex-col items-center gap-2 px-5 pt-6 pb-2">
             <Link to="/admin/dashboard" aria-label="Intyoza admin home" className="rounded-[14px] bg-white px-3 py-2">
               <img src="/logo.png" width={305} height={127} alt="Intyoza" className="h-8 w-auto" />
             </Link>

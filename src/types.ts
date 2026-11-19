@@ -22,7 +22,7 @@ export interface Session {
   user: User;
 }
 
-/** A row from GET /admin/users (read-only; the backend has no update/delete user route). */
+/** A row from GET /admin/users. */
 export interface AdminUser {
   id: string;
   email: string | null;
@@ -170,6 +170,15 @@ export interface Article {
   isLowData: boolean;
   language: Language;
   categoryId: string;
+}
+
+/** One article from GET /learning/articles/{id}, with its content. */
+export interface ArticleDetail extends Article {
+  content: string;
+  published: boolean;
+  createdAt: string;
+  updatedAt: string;
+  category: Category;
 }
 
 /** Body for POST /admin/learning/articles. */

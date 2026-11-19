@@ -67,7 +67,7 @@ export default function DashboardPage() {
   const [now] = useState(() => Date.now());
 
   useEffect(() => {
-    // Each source is optional — a page still renders if one endpoint is unavailable.
+    // Each source is optional, so the page still renders if one fails to load.
     Promise.allSettled([getUsers(), getReports(), getReferrals()]).then(([u, r, ref]) => {
       setUsers(u.status === "fulfilled" ? u.value : []);
       if (r.status === "fulfilled") setReports(r.value);
@@ -103,7 +103,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={TbUsers} tone="brand" label="People on Intyoza" value={fmt(users.length)} hint={`+${fmt(newThisWeek)} this week`} onClick={() => navigate("/admin/users")} />
         <StatCard icon={TbSparkles} tone="teal" label="AI conversations" value={fmt(aiConversations)} hint="Across all users" />
-        <StatCard icon={TbMessages} tone="sun" label="Posts to review" value={fmt(reports.length)} hint="Community moderation" onClick={() => navigate("/admin/community")} />
+        <StatCard icon={TbMessages} tone="sun" label="Posts to review" value={fmt(reports.length)} hint="Safe Space moderation" onClick={() => navigate("/admin/safe-space")} />
         <StatCard icon={TbPhoneCall} tone="accent" label="Referral requests" value={fmt(referrals.length)} hint={`${fmt(pendingReferrals)} pending`} onClick={() => navigate("/admin/referrals")} />
       </div>
 
@@ -137,9 +137,9 @@ export default function DashboardPage() {
       </div>
 
       <Panel
-        title="Community queue"
+        title="Safe Space queue"
         description="Posts and comments waiting for a moderator"
-        action={<Link to="/admin/community" className="btn btn-ghost btn-sm">Moderate <TbArrowRight size={16} /></Link>}
+        action={<Link to="/admin/safe-space" className="btn btn-ghost btn-sm">Moderate <TbArrowRight size={16} /></Link>}
       >
         {reports.length === 0 ? (
           <EmptyState icon={TbCircleCheck} title="Queue is clear" text="Nothing has been reported right now." />
