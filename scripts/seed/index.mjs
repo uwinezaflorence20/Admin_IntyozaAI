@@ -6,6 +6,10 @@
  *   ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run seed -- --apply # creates it
  *   npm run seed -- --learning --apply                         # categories and articles only
  *   npm run seed -- --community --apply                        # community spaces only
+ *   npm run seed -- --learning --no-media --apply              # articles without images/videos
+ *   npm run seed -- --media --apply                            # add images/videos that could not be downloaded earlier
+ *   npm run seed -- --learning --update --apply                # also rewrite live articles whose text changed
+ *   npm run seed -- --myths --apply                            # myth checks only
  *
  * Instead of environment variables, ADMIN_EMAIL and ADMIN_PASSWORD can go in .env.seed (git-ignored).
  *
@@ -15,7 +19,9 @@
  * Not seeded: health facilities (real, verified data only — use the Import button in Services),
  * users, referrals and reports (these come from people using the app).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { articles, categories, myths, spaces } from "./data.mjs";
 
 // Credentials can also live in .env.seed at the project root (git-ignored), as KEY=value lines.
@@ -31,20 +37,30 @@ const APPLY = process.argv.includes("--apply");
 // --learning and --community pick sections (categories + articles, spaces + welcome posts); none means all.
 const ONLY_LEARNING = process.argv.includes("--learning");
 const ONLY_COMMUNITY = process.argv.includes("--community");
-const ALL = !ONLY_LEARNING && !ONLY_COMMUNITY;
+/** Adds missing images and videos to articles that already exist. */
+const ONLY_MEDIA = process.argv.includes("--media");
+/** Creates articles without their images and videos (add them later with --media). */
+const NO_MEDIA = process.argv.includes("--no-media");
+/** With --learning: also rewrites the text of articles that already exist when it differs from data.mjs. */
+const UPDATE = process.argv.includes("--update");
+/** Myth checks only. */
+const ONLY_MYTHS = process.argv.includes("--myths");
+const ALL = !ONLY_LEARNING && !ONLY_COMMUNITY && !ONLY_MEDIA && !ONLY_MYTHS;
 const { ADMIN_EMAIL, ADMIN_PASSWORD } = process.env;
 
 let token = "";
 
 async function call(method, path, body) {
+  // Form data (articles) is sent as is; the runtime sets its multipart Content-Type.
+  const isForm = body instanceof FormData;
   const response = await fetch(`${API_URL}${path}`, {
     method,
     headers: {
       Accept: "application/json",
-      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(body && !isForm ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: isForm ? body : body ? JSON.stringify(body) : undefined,
   });
   const data = await response.json().catch(() => null);
   if (!response.ok) {
@@ -57,6 +73,63 @@ async function call(method, path, body) {
 const list = (result, key) => (result?.data ?? result)?.[key] ?? [];
 /** A created record, whether it is wrapped in `data` or not. */
 const created = (result, key) => result?.[key] ?? result?.data?.[key] ?? result?.data ?? result;
+
+/** Articles are created with multipart form data (the backend also accepts an optional media file). */
+function articleForm(fields, media) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.append(key, String(value));
+  if (media) form.append("media", media.blob, media.name);
+  return form;
+}
+
+const MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "video/quicktime"];
+
+const MEDIA_CACHE = process.env.SEED_MEDIA_CACHE || ".seed-media";
+const EXT_TYPES = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif", mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime" };
+
+/** The cached file name for a Commons file (SVG diagrams are stored as their PNG rendering). */
+const cacheName = (name) => name.replace(/.svg$/i, ".png");
+
+/**
+ * An image or video from Wikimedia Commons, by file name. It is read from the local cache (.seed-media/)
+ * when there, otherwise downloaded from the Commons file server and cached. Returns null when it cannot be
+ * downloaded (for example while Commons is rate-limiting), so the article can be created without it.
+ */
+async function commonsMedia(name) {
+  const cached = join(MEDIA_CACHE, cacheName(name));
+  const isVideo = /.(webm|ogv|mp4|mov)$/i.test(name);
+  let bytes;
+  let type;
+  if (existsSync(cached)) {
+    bytes = readFileSync(cached);
+    type = EXT_TYPES[cached.split(".").pop().toLowerCase()];
+  } else {
+    const file = name.replace(/ /g, "_");
+    const hash = createHash("md5").update(file).digest("hex");
+    const dir = `${hash[0]}/${hash.slice(0, 2)}`;
+    const url = file.toLowerCase().endsWith(".svg")
+      ? `https://upload.wikimedia.org/wikipedia/commons/thumb/${dir}/${encodeURIComponent(file)}/1280px-${encodeURIComponent(file)}.png`
+      : `https://upload.wikimedia.org/wikipedia/commons/${dir}/${encodeURIComponent(file)}`;
+    // Commons asks scripts to go slowly, so pause before each download and back off once when rate-limited.
+    let response;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, attempt === 1 ? 3000 : 30000));
+      response = await fetch(url, { headers: { "User-Agent": "intyoza-seed/1.0 (learning content seed)" } });
+      if (response.status !== 429) break;
+    }
+    type = (response.headers.get("content-type") || "").split(";")[0].trim();
+    if (!response.ok || !MEDIA_TYPES.includes(type)) {
+      console.log(`          media not available yet: ${name} (${response.status}); run with --media later`);
+      return null;
+    }
+    bytes = Buffer.from(await response.arrayBuffer());
+    mkdirSync(MEDIA_CACHE, { recursive: true });
+    writeFileSync(cached, bytes);
+  }
+  if (!MEDIA_TYPES.includes(type)) throw new Error(`${name} is ${type || "an unknown type"}, which the backend does not accept`);
+  if (bytes.length > (isVideo ? 100 : 10) * 1024 * 1024) throw new Error(`${name} is too large to upload`);
+  return { blob: new Blob([bytes], { type }), name: cacheName(name) };
+}
 
 const counts = { created: 0, skipped: 0, failed: 0 };
 
@@ -95,8 +168,9 @@ async function main() {
   }
 
   if (ALL || ONLY_LEARNING) await seedLearning();
-  if (ALL) await seedMyths();
+  if (ALL || ONLY_MYTHS) await seedMyths();
   if (ALL || ONLY_COMMUNITY) await seedCommunity();
+  if (ONLY_MEDIA) await seedMedia();
   summary();
 }
 
@@ -113,16 +187,71 @@ async function seedLearning() {
 
   console.log("\nLearning articles");
   const existingTitles = new Set(list(await call("GET", "/learning/articles"), "articles").map((a) => a.title));
-  for (const { category, ...article } of articles) {
+  for (const { category, media, ...article } of articles) {
     const categoryId = categoryIds[category];
     if (!categoryId && APPLY) {
       console.log(`  FAILED  ${article.title}: category "${category}" was not created`);
       counts.failed++;
       continue;
     }
-    await step(article.title, existingTitles.has(article.title), () =>
-      call("POST", "/admin/learning/articles", { ...article, categoryId })
+    const label = media && !NO_MEDIA ? `${article.title} (with ${article.format === "VIDEO" ? "video" : "image"})` : article.title;
+    await step(label, existingTitles.has(article.title), async () =>
+      call("POST", "/admin/learning/articles", articleForm({ ...article, categoryId, published: true }, media && !NO_MEDIA && (await commonsMedia(media))))
     );
+  }
+
+  if (UPDATE) await updateArticles();
+}
+
+/** Rewrites the text (and format) of live articles whose content differs from data.mjs. */
+async function updateArticles() {
+  console.log("\nArticle updates");
+  if (!token) throw new Error("Set ADMIN_EMAIL and ADMIN_PASSWORD (or .env.seed) to update articles.");
+  const live = list(await call("GET", "/admin/learning/articles"), "articles");
+  for (const article of articles) {
+    const existing = live.find((a) => a.title === article.title);
+    if (!existing) continue;
+    // The admin list may leave the content out; the single-article read has it.
+    const current = existing.content ?? created(await call("GET", `/learning/articles/${existing.id}`), "article")?.content;
+    // Form uploads turn line breaks into \r\n, so compare with line breaks normalised.
+    const normalise = (text) => String(text ?? "").replace(/\r\n/g, "\n");
+    const changed = normalise(current) !== normalise(article.content) || existing.format !== article.format;
+    if (!changed) {
+      console.log(`  same    ${article.title}`);
+      counts.skipped++;
+      continue;
+    }
+    if (!APPLY) {
+      console.log(`  update  ${article.title}`);
+      counts.created++;
+      continue;
+    }
+    try {
+      await call("PATCH", `/admin/learning/articles/${existing.id}`, articleForm({ content: article.content, format: article.format }));
+      console.log(`  updated ${article.title}`);
+      counts.created++;
+    } catch (error) {
+      console.log(`  FAILED  ${article.title}: ${error.message}`);
+      counts.failed++;
+    }
+  }
+}
+
+async function seedMedia() {
+  console.log("\nArticle media");
+  if (!token) throw new Error("Set ADMIN_EMAIL and ADMIN_PASSWORD (or .env.seed) to check article media.");
+  const live = list(await call("GET", "/admin/learning/articles"), "articles");
+  for (const article of articles.filter((a) => a.media)) {
+    const existing = live.find((a) => a.title === article.title);
+    if (!existing) {
+      console.log(`  skip    ${article.title} (article not created yet)`);
+      continue;
+    }
+    await step(`media for ${article.title}`, !!existing.mediaUrl, async () => {
+      const media = await commonsMedia(article.media);
+      if (!media) throw new Error("still not available from Wikimedia Commons");
+      return call("PATCH", `/admin/learning/articles/${existing.id}`, articleForm({}, media));
+    });
   }
 }
 

@@ -4,7 +4,7 @@ import type { IconType } from "react-icons";
 import {
   TbBook, TbBuildingHospital, TbCategory, TbHelpCircle, TbLayoutDashboard, TbLoader2, TbMessages, TbPhoneCall, TbSearch, TbUser, TbUsers,
 } from "react-icons/tb";
-import { getArticles, getCategories, getFacilities, getMyths, getSpaces, getUsers } from "@/lib/api";
+import { getAdminArticles, getCategories, getFacilities, getMyths, getSpaces, getUsers } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface Result {
@@ -33,7 +33,7 @@ const PER_GROUP = 5;
 async function loadIndex(): Promise<Result[]> {
   const settle = <T,>(p: Promise<T[]>) => p.catch(() => [] as T[]);
   const [users, spaces, articles, categories, myths, facilities] = await Promise.all([
-    settle(getUsers()), settle(getSpaces()), settle(getArticles()), settle(getCategories()), settle(getMyths()), settle(getFacilities()),
+    settle(getUsers()), settle(getSpaces()), settle(getAdminArticles()), settle(getCategories()), settle(getMyths()), settle(getFacilities()),
   ]);
   const categoryName = new Map(categories.map((c) => [c.id, c.nameEn]));
   return [

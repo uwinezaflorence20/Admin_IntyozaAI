@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { TbBook, TbCategory, TbChevronRight, TbPlus } from "react-icons/tb";
-import { getArticles, getCategories } from "@/lib/api";
+import { TbBook, TbCategory, TbChevronRight, TbPlus, TbUsers } from "react-icons/tb";
+import { getAdminArticles, getCategories } from "@/lib/api";
 import { Dialog, EmptyState, PageHeader, Loading, StatCard } from "@/components/admin/parts";
 import { ArticleForm, CategoryForm } from "@/components/admin/learning";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,7 @@ export default function LearningPage() {
   const [addingArticle, setAddingArticle] = useState(false);
 
   useEffect(() => {
-    Promise.all([getArticles(), getCategories()])
+    Promise.all([getAdminArticles(), getCategories()])
       .then(([a, c]) => {
         setArticles(a);
         setCategories([...c].sort((x, y) => x.nameEn.localeCompare(y.nameEn)));
@@ -29,13 +29,15 @@ export default function LearningPage() {
   if (!articles) return <Loading label="Loading learning content…" />;
 
   const countIn = (categoryId: string) => articles.filter((a) => a.categoryId === categoryId).length;
+  const drafts = articles.filter((a) => a.published === false).length;
+  const learners = articles.reduce((sum, a) => sum + (a.learnerCount ?? 0), 0);
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Learn"
         title="Learning content"
-        description="Open a category to see its published articles and read them as young people do."
+        description="Open a category to see its articles, read them, and see who is learning them."
       >
         <Button variant="outline" disabled={categories.length === 0} onClick={() => setAddingArticle(true)}>
           <TbPlus size={16} /> Add article
@@ -43,9 +45,10 @@ export default function LearningPage() {
         <Button onClick={() => setAddingCategory(true)}><TbPlus size={16} /> Add category</Button>
       </PageHeader>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard icon={TbCategory} tone="teal" label="Categories" value={categories.length} />
-        <StatCard icon={TbBook} tone="lavender" label="Published articles" value={articles.length} />
+        <StatCard icon={TbBook} tone="lavender" label="Articles" value={articles.length} hint={drafts ? `${drafts} not published` : "All published"} />
+        <StatCard icon={TbUsers} tone="peach" label="Learners" value={learners} hint="Across all articles" />
       </div>
 
       <section>
@@ -98,7 +101,7 @@ export default function LearningPage() {
         <ArticleForm
           categories={categories}
           onCancel={() => setAddingArticle(false)}
-          onCreated={(article) => {
+          onSaved={(article) => {
             setArticles((current) => [article, ...(current ?? [])]);
             setAddingArticle(false);
           }}
