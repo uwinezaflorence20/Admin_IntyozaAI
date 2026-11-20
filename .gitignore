@@ -38,3 +38,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# Media downloaded by the seed script (npm run seed)
+.seed-media/

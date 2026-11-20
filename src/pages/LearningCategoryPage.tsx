@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { TbAlertCircle, TbArrowLeft, TbBook, TbChevronRight, TbPlus } from "react-icons/tb";
-import { getArticles, getCategories } from "@/lib/api";
+import { TbAlertCircle, TbArrowLeft, TbBook, TbChevronRight, TbEyeOff, TbPlus, TbUsers } from "react-icons/tb";
+import { getAdminArticles, getCategories } from "@/lib/api";
 import { FORMAT } from "@/lib/learning";
 import { LANGUAGE_LABELS } from "@/lib/labels";
 import { Dialog, EmptyState, Loading, PageHeader } from "@/components/admin/parts";
@@ -16,7 +16,7 @@ const BackLink = () => (
   </Link>
 );
 
-/** One learning category: its published articles, each opening the full article. */
+/** One learning category: its articles (published or not), each opening the full article. */
 export default function LearningCategoryPage() {
   const { categoryId = "" } = useParams();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -27,11 +27,10 @@ export default function LearningCategoryPage() {
   useEffect(() => {
     let active = true;
     // The category details come from the full list.
-    Promise.all([getCategories(), getArticles(categoryId)])
+    Promise.all([getCategories(), getAdminArticles()])
       .then(([c, a]) => {
         if (!active) return;
         setCategories(c);
-        // Keep only this category's articles even if the filter is ever ignored.
         setArticles(a.filter((x) => x.categoryId === categoryId));
       })
       .catch((error) => active && setLoadError(errorMessage(error, "Could not load this category")));
@@ -65,7 +64,7 @@ export default function LearningCategoryPage() {
 
       <section className="card p-0">
         <div className="border-b border-line p-4">
-          <h2 className="m-0 text-[1.05rem] font-bold">Published articles · {articles.length}</h2>
+          <h2 className="m-0 text-[1.05rem] font-bold">Articles · {articles.length}</h2>
         </div>
         {articles.length === 0 ? (
           <EmptyState icon={TbBook} title="No articles yet" text="Add the first article in this category." />
@@ -88,7 +87,11 @@ export default function LearningCategoryPage() {
                         <span className="tag">{format.label}</span>
                         <span className="tag">{LANGUAGE_LABELS[a.language] ?? a.language}</span>
                         {a.isLowData && <span className="tag tag-teal">Low-data</span>}
+                        {a.published === false && <span className="tag tag-sun"><TbEyeOff size={12} /> Not published</span>}
                       </span>
+                    </span>
+                    <span className="hidden shrink-0 items-center gap-1.5 text-[0.85rem] text-muted sm:inline-flex" title="People learning this article">
+                      <TbUsers size={16} /> {a.learnerCount ?? 0}
                     </span>
                     <TbChevronRight size={18} className="shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand" />
                   </Link>
@@ -104,7 +107,7 @@ export default function LearningCategoryPage() {
           categories={categories}
           categoryId={categoryId}
           onCancel={() => setAdding(false)}
-          onCreated={(article) => {
+          onSaved={(article) => {
             if (article.categoryId === categoryId) setArticles((list) => [article, ...(list ?? [])]);
             setAdding(false);
           }}

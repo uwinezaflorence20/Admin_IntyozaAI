@@ -2,6 +2,10 @@ import type {
   AdminUser,
   Article,
   ArticleDetail,
+  ArticleLearners,
+  Learner,
+  MythSubmission,
+  MythVerdict,
   Category,
   CommunityReport,
   CommunitySpace,
@@ -73,15 +77,17 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function apiCall<T = any>(endpoint: string, { body, ...options }: RequestOptions = {}): Promise<T> {
   const token = getSession()?.token;
+  // Form data (file uploads) is sent as is, and the browser sets its multipart Content-Type.
+  const isForm = body instanceof FormData;
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
     headers: {
       Accept: "application/json",
-      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(body && !isForm ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: isForm ? body : body ? JSON.stringify(body) : undefined,
   });
 
   const data = await response.json().catch(() => null);
@@ -171,9 +177,69 @@ export async function getArticle(id: string): Promise<ArticleDetail> {
   return (await read<{ article: ArticleDetail }>(`/learning/articles/${id}`)).article;
 }
 
-export async function createArticle(article: NewArticle): Promise<Article> {
-  const result = await apiCall("/admin/learning/articles", { method: "POST", body: article });
-  return result?.article ?? result?.data?.article ?? result;
+/** Every article, including unpublished ones, each with how many people are learning it. */
+export async function getAdminArticles(): Promise<Article[]> {
+  const result = await read<{ articles: Article[] } | Article[]>("/admin/learning/articles");
+  return Array.isArray(result) ? result : result.articles;
+}
+
+/** Article fields as multipart form data, with an optional image or video file. */
+function articleForm(fields: Partial<NewArticle>, media?: File | null, removeMedia?: boolean) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined && value !== null) form.append(key, String(value));
+  }
+  if (media) form.append("media", media);
+  if (removeMedia) form.append("removeMedia", "true");
+  return form;
+}
+
+const unwrapArticle = (result: { article?: Article; data?: { article?: Article } } & Partial<Article>): Article =>
+  (result?.article ?? result?.data?.article ?? result) as Article;
+
+export async function createArticle(article: NewArticle, media?: File | null): Promise<Article> {
+  return unwrapArticle(await apiCall("/admin/learning/articles", { method: "POST", body: articleForm(article, media) }));
+}
+
+/** Changes only the fields sent. A new media file replaces the current one; removeMedia drops it. */
+export async function updateArticle(id: string, changes: Partial<NewArticle>, media?: File | null, removeMedia?: boolean): Promise<Article> {
+  return unwrapArticle(await apiCall(`/admin/learning/articles/${id}`, { method: "PATCH", body: articleForm(changes, media, removeMedia) }));
+}
+
+/** Deletes an article and its learners' progress. */
+export const deleteArticle = (id: string) => apiCall(`/admin/learning/articles/${id}`, { method: "DELETE" });
+
+/** Who is learning an article, with summary counts. */
+export async function getArticleLearners(id: string): Promise<ArticleLearners> {
+  const result = await read<Record<string, unknown>>(`/admin/learning/articles/${id}/learners`);
+  return toArticleLearners(result);
+}
+
+// The learners response is read defensively: counts come from `summary` (or are worked out from the list).
+function toArticleLearners(result: Record<string, unknown>): ArticleLearners {
+  const rows = (Array.isArray(result.learners) ? result.learners : []) as Record<string, unknown>[];
+  const learners: Learner[] = rows.map((row, i) => {
+    const user = (row.user ?? row.learner ?? {}) as { id?: string; alias?: string | null; email?: string | null };
+    const status = String(row.status ?? "").toUpperCase().includes("COMPLETE") || row.completedAt ? "COMPLETED" : "IN_PROGRESS";
+    return {
+      id: String(row.id ?? user.id ?? i),
+      alias: user.alias ?? (row.alias as string | null | undefined) ?? null,
+      email: user.email ?? (row.email as string | null | undefined) ?? null,
+      status,
+      startedAt: (row.startedAt ?? row.createdAt ?? null) as string | null,
+      completedAt: (row.completedAt ?? null) as string | null,
+    };
+  });
+  const summary = (result.summary ?? result.counts ?? {}) as Partial<ArticleLearners["summary"]>;
+  const completed = summary.completed ?? learners.filter((l) => l.status === "COMPLETED").length;
+  return {
+    summary: {
+      total: summary.total ?? learners.length,
+      inProgress: summary.inProgress ?? learners.length - completed,
+      completed,
+    },
+    learners,
+  };
 }
 
 export async function getMyths(): Promise<Myth[]> {
@@ -183,6 +249,19 @@ export async function getMyths(): Promise<Myth[]> {
 export async function createMyth(myth: NewMyth): Promise<Myth> {
   const result = await apiCall("/admin/myths", { method: "POST", body: myth });
   return result?.myth ?? result?.data?.myth ?? result;
+}
+
+/** Myths sent in by users, optionally only the pending or the answered ones. */
+export async function getMythSubmissions(status?: MythSubmission["status"]): Promise<MythSubmission[]> {
+  const query = status ? `?status=${status}` : "";
+  const result = await read<{ submissions: MythSubmission[] } | MythSubmission[]>(`/admin/myths/submissions${query}`);
+  return Array.isArray(result) ? result : result.submissions;
+}
+
+/** Answers a user's myth (or changes an earlier answer). */
+export async function answerMythSubmission(id: string, answer: { verdict: MythVerdict; response: string }): Promise<MythSubmission> {
+  const result = await apiCall(`/admin/myths/submissions/${id}`, { method: "PATCH", body: answer });
+  return result?.submission ?? result?.data?.submission ?? result;
 }
 
 /* ---------- Professional referrals ---------- */

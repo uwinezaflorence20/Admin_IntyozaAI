@@ -1,14 +1,16 @@
-// Forms shared by the Learning pages.
+// Forms shared by the Learning and Myths pages.
+import { useState, type ChangeEvent } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { createArticle, createCategory, createMyth } from "@/lib/api";
-import { FORMAT } from "@/lib/learning";
+import { TbPhoto, TbPhotoUp, TbTrash, TbVideo } from "react-icons/tb";
+import { answerMythSubmission, createArticle, createCategory, createMyth, updateArticle } from "@/lib/api";
+import { FORMAT, VERDICT } from "@/lib/learning";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { errorMessage } from "@/lib/utils";
-import type { Article, ArticleFormat, Category, Myth, NewArticle, NewCategory, NewMyth } from "@/types";
+import type { Article, ArticleFormat, Category, Myth, MythSubmission, MythVerdict, NewArticle, NewCategory, NewMyth } from "@/types";
 
 const categorySchema = z.object({
   nameEn: z.string().trim().min(1, "English name is required"),
@@ -73,30 +75,70 @@ const articleSchema = z.object({
   format: z.enum(["ARTICLE", "VIDEO", "AUDIO", "QUIZ"]),
   content: z.string().trim().min(1, "Content is required"),
   isLowData: z.boolean(),
+  published: z.boolean(),
 });
+
+const MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "video/quicktime"];
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+
+/** Checks a picked media file against what the backend accepts; returns a message when it is not allowed. */
+function mediaProblem(file: File) {
+  if (!MEDIA_TYPES.includes(file.type)) return "Choose a JPEG, PNG, WebP or GIF image, or an MP4, WebM or MOV video.";
+  const isVideo = file.type.startsWith("video/");
+  if (file.size > (isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES)) return isVideo ? "Videos can be up to 100 MB." : "Images can be up to 10 MB.";
+  return "";
+}
 
 interface ArticleFormProps {
   categories: Category[];
   /** Category picked in advance, e.g. when adding from a category page. */
   categoryId?: string;
+  /** The article being edited; leave out to create a new one. */
+  article?: Article;
   onCancel: () => void;
-  onCreated: (article: Article) => void;
+  onSaved: (article: Article) => void;
 }
 
-export function ArticleForm({ categories, categoryId = "", onCancel, onCreated }: ArticleFormProps) {
+export function ArticleForm({ categories, categoryId = "", article, onCancel, onSaved }: ArticleFormProps) {
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<NewArticle>({
     resolver: zodResolver(articleSchema),
-    defaultValues: { title: "", categoryId, language: "EN", format: "ARTICLE", content: "", isLowData: false },
+    defaultValues: article
+      ? {
+          title: article.title,
+          categoryId: article.categoryId,
+          language: article.language,
+          format: article.format,
+          content: article.content ?? "",
+          isLowData: article.isLowData,
+          published: article.published ?? true,
+        }
+      : { title: "", categoryId, language: "EN", format: "ARTICLE", content: "", isLowData: false, published: true },
   });
+  const [media, setMedia] = useState<File | null>(null);
+  const [mediaError, setMediaError] = useState("");
+  const [removeMedia, setRemoveMedia] = useState(false);
+  const currentMedia = article?.mediaUrl && !removeMedia ? article.mediaUrl : null;
+
+  const pickMedia = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const problem = mediaProblem(file);
+    setMediaError(problem);
+    if (!problem) setMedia(file);
+  };
 
   const onSubmit = async (values: NewArticle) => {
     try {
-      const created = await createArticle(values);
-      // Fill in anything the response leaves out so the new row shows correctly.
-      onCreated({ ...values, ...created, id: created?.id ?? crypto.randomUUID() });
-      toast.success("Article published");
+      const saved = article
+        ? await updateArticle(article.id, values, media, removeMedia && !media)
+        : await createArticle(values, media);
+      // Fill in anything the response leaves out so the page shows the saved values.
+      onSaved({ ...article, ...values, ...saved, id: saved?.id ?? article?.id ?? crypto.randomUUID() });
+      toast.success(article ? "Article updated" : values.published ? "Article published" : "Article saved as draft");
     } catch (error) {
-      toast.error(errorMessage(error, "Could not create the article"));
+      toast.error(errorMessage(error, article ? "Could not update the article" : "Could not create the article"));
     }
   };
 
@@ -135,12 +177,57 @@ export function ArticleForm({ categories, categoryId = "", onCancel, onCreated }
         <textarea id="content" rows={8} className="input h-auto py-2.5" {...register("content")} aria-invalid={!!errors.content} />
         {errors.content && <p className="field-error">{errors.content.message}</p>}
       </div>
-      <label className="flex items-center gap-2 text-[0.9rem] font-medium">
-        <input type="checkbox" className="size-4" {...register("isLowData")} /> Low-data friendly
-      </label>
+      <div>
+        <span className="label">Image or video (optional)</span>
+        {media || currentMedia ? (
+          <div className="flex items-center gap-3 rounded-[14px] border border-line p-2">
+            {media ? (
+              <span className="grid size-14 shrink-0 place-items-center rounded-[10px] bg-surface-2 text-brand">
+                {media.type.startsWith("video/") ? <TbVideo size={22} /> : <TbPhoto size={22} />}
+              </span>
+            ) : article?.mediaType === "VIDEO" ? (
+              <video src={currentMedia!} className="size-14 shrink-0 rounded-[10px] object-cover" muted />
+            ) : (
+              <img src={currentMedia!} alt="" className="size-14 shrink-0 rounded-[10px] object-cover" />
+            )}
+            <span className="min-w-0 flex-1 truncate text-[0.88rem]">{media ? media.name : "Current media"}</span>
+            <label className="btn btn-ghost btn-sm cursor-pointer focus-within:ring-2 focus-within:ring-brand">
+              <input type="file" accept={MEDIA_TYPES.join(",")} className="sr-only" onChange={pickMedia} />
+              Change
+            </label>
+            <button
+              type="button"
+              className="icon-btn text-danger hover:bg-danger-soft"
+              aria-label="Remove image or video"
+              onClick={() => {
+                if (media) setMedia(null);
+                else setRemoveMedia(true);
+              }}
+            >
+              <TbTrash size={17} />
+            </button>
+          </div>
+        ) : (
+          <label className="flex cursor-pointer flex-col items-center gap-1 rounded-[14px] border border-dashed border-line px-4 py-5 text-center transition hover:border-brand hover:bg-surface-2 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand-soft">
+            <input type="file" accept={MEDIA_TYPES.join(",")} className="sr-only" onChange={pickMedia} />
+            <TbPhotoUp size={24} className="text-brand" />
+            <span className="text-[0.9rem] font-semibold">Upload an image or video</span>
+            <span className="text-[0.8rem] text-muted">Images up to 10 MB, videos up to 100 MB</span>
+          </label>
+        )}
+        {mediaError && <p className="field-error" role="alert">{mediaError}</p>}
+      </div>
+      <div className="flex flex-wrap gap-5">
+        <label className="flex items-center gap-2 text-[0.9rem] font-medium">
+          <input type="checkbox" className="size-4" {...register("isLowData")} /> Low-data friendly
+        </label>
+        <label className="flex items-center gap-2 text-[0.9rem] font-medium">
+          <input type="checkbox" className="size-4" {...register("published")} /> Published (visible in the app)
+        </label>
+      </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" isLoading={isSubmitting}>Publish article</Button>
+        <Button type="submit" isLoading={isSubmitting}>{article ? "Save changes" : "Save article"}</Button>
       </div>
     </form>
   );
@@ -203,3 +290,68 @@ export function MythForm({ onCancel, onCreated }: { onCancel: () => void; onCrea
   );
 }
 
+
+const answerSchema = z.object({
+  verdict: z.enum(["TRUE", "FALSE", "PARTLY_TRUE"]),
+  response: z.string().trim().min(1, "Write the answer the person will see").max(5000, "Keep the answer under 5000 characters"),
+});
+
+type AnswerValues = z.infer<typeof answerSchema>;
+
+interface MythAnswerFormProps {
+  submission: MythSubmission;
+  onCancel: () => void;
+  onAnswered: (submission: MythSubmission) => void;
+}
+
+/** Answers a myth a user sent in: whether it is true, and why. Also used to change an earlier answer. */
+export function MythAnswerForm({ submission, onCancel, onAnswered }: MythAnswerFormProps) {
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<AnswerValues>({
+    resolver: zodResolver(answerSchema),
+    defaultValues: { verdict: submission.verdict ?? "FALSE", response: submission.response ?? "" },
+  });
+
+  const onSubmit = async (values: AnswerValues) => {
+    try {
+      const saved = await answerMythSubmission(submission.id, values);
+      // The response may leave fields out, so the values just sent fill the gaps and the status is set last.
+      onAnswered({ ...submission, ...values, answeredAt: new Date().toISOString(), ...saved, status: "ANSWERED" });
+      toast.success("Answer sent");
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not send the answer"));
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      <p className="m-0 rounded-[14px] bg-surface-2 px-4 py-3 text-[0.95rem]">“{submission.mythText}”</p>
+      <fieldset className="m-0 border-0 p-0">
+        <legend className="label">Is it true?</legend>
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(VERDICT) as MythVerdict[]).map((v) => (
+            <label key={v} className="chip min-h-9 cursor-pointer has-[:checked]:border-brand has-[:checked]:bg-brand-soft has-[:checked]:text-brand">
+              <input type="radio" value={v} className="sr-only" {...register("verdict")} />
+              {VERDICT[v].label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div>
+        <label htmlFor="response" className="label">Answer</label>
+        <textarea
+          id="response"
+          rows={5}
+          className="input h-auto py-2.5"
+          placeholder="Explain the facts in simple words. The person who sent the myth will see this."
+          {...register("response")}
+          aria-invalid={!!errors.response}
+        />
+        {errors.response && <p className="field-error">{errors.response.message}</p>}
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" isLoading={isSubmitting}>{submission.status === "ANSWERED" ? "Update answer" : "Send answer"}</Button>
+      </div>
+    </form>
+  );
+}

@@ -162,7 +162,12 @@ export type NewCategory = Omit<Category, "id">;
 
 export type ArticleFormat = "ARTICLE" | "VIDEO" | "AUDIO" | "QUIZ";
 
-/** A learning article from GET /learning/articles. */
+export type MediaType = "IMAGE" | "VIDEO";
+
+/**
+ * A learning article. GET /learning/articles sends the basic fields; GET /admin/learning/articles
+ * also sends unpublished articles, their media and how many people are learning each one.
+ */
 export interface Article {
   id: string;
   title: string;
@@ -170,6 +175,13 @@ export interface Article {
   isLowData: boolean;
   language: Language;
   categoryId: string;
+  content?: string;
+  published?: boolean;
+  mediaUrl?: string | null;
+  mediaType?: MediaType | null;
+  learnerCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /** One article from GET /learning/articles/{id}, with its content. */
@@ -181,7 +193,7 @@ export interface ArticleDetail extends Article {
   category: Category;
 }
 
-/** Body for POST /admin/learning/articles. */
+/** Fields for creating an article (sent as form data, with an optional media file). */
 export interface NewArticle {
   categoryId: string;
   language: Language;
@@ -189,6 +201,24 @@ export interface NewArticle {
   content: string;
   format: ArticleFormat;
   isLowData: boolean;
+  published: boolean;
+}
+
+export type LearnerStatus = "IN_PROGRESS" | "COMPLETED";
+
+/** A person learning an article, from GET /admin/learning/articles/{id}/learners. */
+export interface Learner {
+  id: string;
+  alias: string | null;
+  email: string | null;
+  status: LearnerStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface ArticleLearners {
+  summary: { total: number; inProgress: number; completed: number };
+  learners: Learner[];
 }
 
 /** A myth/fact entry from GET /myths. */
@@ -201,6 +231,26 @@ export interface Myth {
 }
 
 export type NewMyth = Omit<Myth, "id">;
+
+export type MythVerdict = "TRUE" | "FALSE" | "PARTLY_TRUE";
+
+/** A myth a user sent in for checking, from GET /admin/myths/submissions. */
+export interface MythSubmission {
+  id: string;
+  mythText: string;
+  language: Language;
+  status: "PENDING" | "ANSWERED";
+  verdict?: MythVerdict | null;
+  response?: string | null;
+  createdAt: string;
+  answeredAt?: string | null;
+  /** The sender; the backend may name this field user or sender. */
+  user?: { id?: string; alias?: string | null } | null;
+  sender?: { id?: string; alias?: string | null } | null;
+  /** The admin who answered; the backend may name this field answeredBy or admin. */
+  answeredBy?: { id?: string; alias?: string | null; email?: string | null } | null;
+  admin?: { id?: string; alias?: string | null; email?: string | null } | null;
+}
 
 export type ReferralStatus = "PENDING" | "CONTACTED" | "RESOLVED" | "CANCELLED";
 

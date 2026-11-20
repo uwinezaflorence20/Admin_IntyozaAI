@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { TbBell, TbFlag, TbLoader2, TbPhoneCall, TbTrash } from "react-icons/tb";
-import { getReferrals, getReports } from "@/lib/api";
+import { TbBell, TbFlag, TbLoader2, TbMessageQuestion, TbPhoneCall, TbTrash } from "react-icons/tb";
+import { getMythSubmissions, getReferrals, getReports } from "@/lib/api";
 import { cn, errorMessage, timeAgo } from "@/lib/utils";
 
-/** Something waiting for an admin, built from the pending reports and referrals queues. */
+/** Something waiting for an admin, built from the pending reports, referrals and myths sent in by users. */
 interface Notice {
   id: string;
-  kind: "report" | "referral";
+  kind: "report" | "referral" | "myth";
   title: string;
   detail: string;
   createdAt: string;
@@ -54,7 +54,8 @@ const writeSeenAt = (time: number) => {
 };
 
 async function loadNotices(): Promise<Notice[]> {
-  const [reports, referrals] = await Promise.all([getReports(), getReferrals()]);
+  // Myths sent in by users are optional here, so a problem loading them never hides the other notifications.
+  const [reports, referrals, myths] = await Promise.all([getReports(), getReferrals(), getMythSubmissions("PENDING").catch(() => [])]);
   const fromReports: Notice[] = reports.map((r) => ({
     id: `report-${r.id}`,
     kind: "report",
@@ -73,7 +74,17 @@ async function loadNotices(): Promise<Notice[]> {
       createdAt: r.createdAt,
       href: "/admin/referrals",
     }));
-  return [...fromReports, ...fromReferrals].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const fromMyths: Notice[] = myths
+    .filter((m) => m.status !== "ANSWERED")
+    .map((m) => ({
+      id: `myth-${m.id}`,
+      kind: "myth",
+      title: "Myth sent in to check",
+      detail: m.mythText.slice(0, 90),
+      createdAt: m.createdAt,
+      href: "/admin/myths",
+    }));
+  return [...fromReports, ...fromReferrals, ...fromMyths].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 /** Header bell: pending reports and referral requests, refreshed every minute. */
@@ -204,7 +215,7 @@ export function Notifications() {
                 <ul className="m-0 list-none divide-y divide-line p-0">
                   {visible.map((n) => {
                     const isNew = new Date(n.createdAt).getTime() > highlightFrom;
-                    const Icon = n.kind === "report" ? TbFlag : TbPhoneCall;
+                    const Icon = n.kind === "report" ? TbFlag : n.kind === "myth" ? TbMessageQuestion : TbPhoneCall;
                     return (
                       <li key={n.id} className="group relative">
                         <Link
@@ -215,7 +226,7 @@ export function Notifications() {
                           <span
                             className={cn(
                               "grid size-9 shrink-0 place-items-center rounded-full",
-                              n.kind === "report" ? "bg-accent-soft text-accent-text" : "bg-teal-soft text-teal-text"
+                              n.kind === "report" ? "bg-accent-soft text-accent-text" : n.kind === "myth" ? "bg-sun-soft text-sun-text" : "bg-teal-soft text-teal-text"
                             )}
                           >
                             <Icon size={17} />
